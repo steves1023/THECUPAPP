@@ -269,10 +269,12 @@ function renderSyncBar(){
 
 /* \u2550\u2550\u2550 MATH \u2550\u2550\u2550 */
 function teamPts(tn){return state.matches.reduce((pts,m)=>{const r=mResult(m);if(r.winner==='team'+tn)return pts+r.points;if(r.winner==='half')return pts+0.5;return pts;},0);}
-function mResult(m){if(m.format==='stroke'||m.format==='stableford')return strokeResult(m);return mpResult(m);}
+function mResult(m){if(m.format==='stroke'||m.format==='stableford')return strokeResult(m);if(m.matchType==='individual')return indResult(m);return mpResult(m);}
 function mpResult(m){
   let up=0;const holes=m.holes||{};
   const played=Object.keys(holes).filter(h=>{const d=holes[h];return d&&d.t1!=null&&d.t2!=null;}).length;
+  // Also count holes where at least one score entered (for progress display)
+  const anyPlayed=Object.keys(holes).filter(h=>{const d=holes[h];return d&&(d.t1!=null||d.t2!=null);}).length;
   if(!played)return{winner:null,status:'AS',points:0};
   const hd=hDiff(m);
   const _mpcd=m.courseData||state.settings.courseData;
@@ -282,6 +284,43 @@ function mpResult(m){
     const t1n=d.t1-st;if(t1n<d.t2)up++;else if(d.t2<t1n)up--;
   }
   const left=m.totalHoles-played,abs=Math.abs(up);
+  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
+  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' DN'};}
+  if(left===0)return{winner:'half',status:'AS',points:0.5};
+  return{winner:null,status:'AS',points:0};
+}
+function indResult(m){
+  // For individual matches: compare net scores hole by hole, sum wins per "side"
+  const pids=m.indPlayers||[];
+  const players=pids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
+  if(!players.length) return{winner:null,status:'AS',points:0};
+  const sides=m.indPlayerSides||{};
+  const minH=Math.min(...players.map(p=>p.handicap||0));
+  const diffs=players.map(p=>Math.round(((p.handicap||0)-minH)*(m.hdcpPercent||100)/100));
+  const holes=m.holes||{};
+  const played=Object.keys(holes).filter(h=>{
+    const d=holes[h]; if(!d) return false;
+    return players.some((_,pi)=>d['p'+pi]!=null);
+  }).length;
+  if(!played) return{winner:null,status:'AS',points:0};
+  // Count holes won by each side
+  let s1wins=0,s2wins=0;
+  for(let h=1;h<=m.totalHoles;h++){
+    const d=holes[h]; if(!d) continue;
+    const nets=players.map((_,pi)=>{
+      const raw=d['p'+pi]; if(raw==null) return null;
+      const si=holeSI(m,h);
+      return raw-strokesOn(diffs[pi],si,m.totalHoles);
+    });
+    const valid=nets.filter(n=>n!==null);
+    if(!valid.length) continue;
+    const minNet=Math.min(...valid);
+    const winners=players.filter((_,pi)=>nets[pi]===minNet);
+    if(winners.length===1){
+      if(sides[winners[0].id]==='2') s2wins++; else s1wins++;
+    }
+  }
+  const up=s1wins-s2wins, abs=Math.abs(up), left=m.totalHoles-played;
   if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
   if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' DN'};}
   if(left===0)return{winner:'half',status:'AS',points:0.5};
@@ -473,7 +512,11 @@ function renderMatchCard(m,i){
   let dots='';
   for(let h=1;h<=m.totalHoles;h++){
     const d=(m.holes||{})[h];let cls='pending';
-    if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(m),si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
+    if(m.matchType==='individual'){
+      if(d){const ipids=m.indPlayers||[];const ipls=ipids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);const iminH=ipls.length?Math.min(...ipls.map(p=>p.handicap||0)):0;const idiffs=ipls.map(p=>Math.round(((p.handicap||0)-iminH)*(m.hdcpPercent||100)/100));const isides=m.indPlayerSides||{};const si=holeSI(m,h);const nets=ipls.map((_,pi)=>{const r=d['p'+pi];if(r==null)return null;return r-strokesOn(idiffs[pi],si,m.totalHoles);});const valid=nets.filter(n=>n!==null);if(valid.length>=2){const mn=Math.min(...valid);const wi=nets.findIndex(n=>n===mn);const tied=nets.filter(n=>n===mn).length>1;cls=tied?'halve':isides[ipids[wi]]==='2'?'win2':'win1';}}
+    } else {
+      if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(m),si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
+    }
     dots+=`<div class="hp-dot ${cls}" title="Hole ${h}"></div>`;
   }
   const cn=m.courseData?m.courseData.name:(state.settings.courseData?state.settings.courseData.name:'');
@@ -701,13 +744,12 @@ function renderGroupCard(parent,pi,children){
 }
 
 
-function openScorecard(mi){
+function openScorecard(mi,startHole){
   const m=state.matches[mi];
   const isInd=m.matchType==='individual';
   const cd=m.courseData||state.settings.courseData;
   const holes=matchHoles(m);
-  const front=holes.slice(0,Math.min(9,holes.length));
-  const back=m.totalHoles===18?holes.slice(9):[];
+  const currentHole=startHole||holes[0];
 
   function holeInfo(h){
     const hd2=m.holes[h]||{};
@@ -715,203 +757,196 @@ function openScorecard(mi){
     return{hd2, par:ch?ch.par:4, si:ch?ch.handicap:h};
   }
 
-  // ── TEAM BLOCK ──────────────────────────────────────────────────────────────
-  function teamBlock(holeList,label){
-    if(!holeList.length) return '';
-    const hd=hDiff(m), absHd=Math.abs(hd);
-    const t1name=mLabel(m,1), t2name=mLabel(m,2);
-    let t1tot=0,t2tot=0,t1any=false,t2any=false;
-
-    // Hole columns
-    const holeCols=holeList.map(h=>{
-      const{hd2,par,si}=holeInfo(h);
-      const st=strokesOn(hd,si,m.totalHoles);
-      const t1v=hd2.t1!=null?hd2.t1:null;
-      const t2v=hd2.t2!=null?hd2.t2:null;
-      const t1net=t1v!=null?t1v+st:null;
-      const t2net=t2v!=null?t2v:null;
-      const t1win=t1net!=null&&t2net!=null&&t1net<t2net;
-      const t2win=t1net!=null&&t2net!=null&&t2net<t1net;
-      const recv=st<0?1:st>0?2:0; // which team gets stroke on this hole
-      if(t1v!=null){t1tot+=t1v;t1any=true;}
-      if(t2v!=null){t2tot+=t2v;t2any=true;}
-      return{h,par,si,hd2,t1v,t2v,t1win,t2win,recv,absSt:Math.abs(st)};
-    });
-
-    const thStyle=`background:var(--blue);color:#fff;padding:6px 4px;text-align:center;font-size:13px;font-weight:bold;min-width:44px;`;
-    const parStyle=`background:var(--blue);color:rgba(255,255,255,0.5);padding:2px 4px;text-align:center;font-size:10px;`;
-    const siStyle=`background:rgba(0,39,76,0.85);color:rgba(255,255,255,0.45);padding:2px 4px;text-align:center;font-size:9px;`;
-
-    const hdrHoles=holeCols.map(c=>`<th style="${thStyle}">${c.h}${c.recv>0?`<span style="display:block;width:6px;height:6px;border-radius:50%;background:${c.recv===1?state.team1.color:state.team2.color};margin:1px auto 0;"></span>`:'<span style="display:block;height:7px;"></span>'}</th>`).join('');
-    const hdrPar=holeCols.map(c=>`<td style="${parStyle}">${c.par}</td>`).join('');
-    const hdrSI=holeCols.map(c=>`<td style="${siStyle}">${c.si}</td>`).join('');
-
-    function scoreRow(teamIdx){
-      const isT1=teamIdx===1;
-      const name=isT1?t1name:t2name;
-      const color=isT1?state.team1.color:state.team2.color;
-      const hcp=avgHT(isT1?m.team1Players:m.team2Players);
-      const cells=holeCols.map(c=>{
-        const v=isT1?c.t1v:c.t2v;
-        const win=isT1?c.t1win:c.t2win;
-        const cls=getScoreCls(v,c.par);
-        const key=isT1?'t1':'t2';
-        return`<td style="padding:3px;border:1px solid rgba(0,39,76,0.07);${win?`border-bottom:3px solid ${color};`:''}">
-          <input class="sc-input ${cls}" type="number" min="1" max="15" value="${v!=null?v:''}" placeholder="—"
-            onchange="updHole(${mi},${c.h},'${key}',this.value,${c.par})"
-            style="width:42px;font-size:16px;">
-        </td>`;
-      }).join('');
-      const tot=isT1?t1any?t1tot:'—':t2any?t2tot:'—';
-      return`<tr>
-        <td style="background:#fff;padding:6px 8px;white-space:nowrap;border-right:2px solid rgba(0,39,76,0.1);min-width:90px;">
-          <div style="display:flex;align-items:center;gap:5px;">
-            <span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;"></span>
-            <span style="font-size:13px;font-weight:bold;color:var(--blue);">${name.split('/')[0].trim()}</span>
-          </div>
-          <div style="font-size:10px;color:var(--text-muted);padding-left:14px;">HCP ${hcp}</div>
-        </td>
-        ${cells}
-        <td style="padding:6px 4px;font-weight:bold;font-size:15px;color:var(--blue);background:rgba(0,39,76,0.04);text-align:center;min-width:36px;">${tot}</td>
-      </tr>`;
-    }
-
-    return`<div style="margin-bottom:12px;">
-      <table style="border-collapse:collapse;width:100%;">
-        <thead>
-          <tr>
-            <th style="background:var(--blue);color:var(--maize);padding:7px 8px;text-align:left;font-size:12px;font-weight:bold;">${label}</th>
-            ${hdrHoles}
-            <th style="background:var(--blue);color:var(--maize);padding:6px 4px;font-size:10px;">TOT</th>
-          </tr>
-          <tr><td style="${parStyle}text-align:left;padding-left:8px;">Par</td>${hdrPar}<td style="${parStyle}"></td></tr>
-          <tr><td style="${siStyle}text-align:left;padding-left:8px;">SI</td>${hdrSI}<td style="${siStyle}"></td></tr>
-        </thead>
-        <tbody>${scoreRow(1)}${scoreRow(2)}</tbody>
-      </table>
-    </div>`;
-  }
-
-  // ── INDIVIDUAL BLOCK ────────────────────────────────────────────────────────
-  function indBlock(holeList,label){
-    if(!holeList.length) return '';
-    const pids=m.indPlayers||[];
-    const players=pids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
-    if(!players.length) return '';
-    const pcolors=pids.map((_,i)=>AVC[i%AVC.length]);
-    const minH=Math.min(...players.map(p=>p.handicap||0));
-    const diffs=players.map(p=>Math.round(((p.handicap||0)-minH)*(m.hdcpPercent||100)/100));
-    const cSides=m.indPlayerSides||{};
-
-    let totals=players.map(()=>({t:0,any:false}));
-
-    const holeCols=holeList.map(h=>{
-      const{hd2,par,si}=holeInfo(h);
-      const raws=players.map((_,pi)=>hd2['p'+pi]!=null?hd2['p'+pi]:null);
-      const nets=players.map((_,pi)=>raws[pi]!=null?raws[pi]-strokesOn(diffs[pi],si,m.totalHoles):null);
-      const validNets=nets.filter(n=>n!==null);
-      const minNet=validNets.length?Math.min(...validNets):null;
-      const winner=minNet!==null&&validNets.filter(n=>n===minNet).length===1
-        ?nets.findIndex(n=>n===minNet):-1;
-      raws.forEach((r,pi)=>{if(r!=null){totals[pi].t+=r;totals[pi].any=true;}});
-      return{h,par,si,hd2,raws,winner};
-    });
-
-    const thStyle=`background:var(--blue);color:#fff;padding:6px 4px;text-align:center;font-size:13px;font-weight:bold;min-width:44px;`;
-    const parStyle=`background:var(--blue);color:rgba(255,255,255,0.5);padding:2px 4px;text-align:center;font-size:10px;`;
-    const siStyle=`background:rgba(0,39,76,0.85);color:rgba(255,255,255,0.45);padding:2px 4px;text-align:center;font-size:9px;`;
-
-    const hdrHoles=holeCols.map(c=>`<th style="${thStyle}">${c.h}<span style="display:block;height:7px;"></span></th>`).join('');
-    const hdrPar=holeCols.map(c=>`<td style="${parStyle}">${c.par}</td>`).join('');
-    const hdrSI=holeCols.map(c=>`<td style="${siStyle}">${c.si}</td>`).join('');
-
-    const playerRows=players.map((p,pi)=>{
-      const color=pcolors[pi];
-      const side=cSides[p.id]==='2'?state.team2.color:state.team1.color;
-      const strkLabel=diffs[pi]>0?` +${diffs[pi]}`:'';
-      const yds=getHoleYards(m,holeList[0],p.id);
-      const teeName=getPlayerTeeName(m,p.id);
-      const cells=holeCols.map(c=>{
-        const raw=c.raws[pi];
-        const isWinner=c.winner===pi;
-        const cls=getScoreCls(raw,c.par);
-        // Stroke dot
-        const st=strokesOn(diffs[pi],c.si,m.totalHoles);
-        const dot=st>0?`<span style="display:block;width:5px;height:5px;border-radius:50%;background:${color};margin:1px auto 0;"></span>`:'<span style="display:block;height:6px;"></span>';
-        return`<td style="padding:3px;border:1px solid rgba(0,39,76,0.06);${isWinner?`border-bottom:3px solid ${color};background:rgba(46,125,50,0.05);`:''}">
-          ${dot}
-          <input id="sc-${mi}-${c.h}-${pi}" class="sc-input ${cls}" type="number" min="1" max="15"
-            value="${raw!=null?raw:''}" placeholder="—"
-            onchange="updHoleInd(${mi},${c.h},${pi},'sc-${mi}-${c.h}-${pi}',this.value,${c.par})"
-            style="width:42px;font-size:16px;${isWinner?'color:#1B5E20;font-weight:bold;':''}">
-        </td>`;
-      }).join('');
-      return`<tr>
-        <td style="background:#fff;padding:6px 8px;white-space:nowrap;border-right:2px solid rgba(0,39,76,0.1);min-width:100px;">
-          <div style="display:flex;align-items:center;gap:5px;">
-            <span style="width:9px;height:9px;border-radius:50%;background:${side};flex-shrink:0;"></span>
-            <span style="font-size:13px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
-          </div>
-          <div style="font-size:10px;color:var(--text-muted);padding-left:14px;">HCP${p.handicap}${strkLabel}${teeName?' · '+teeName:''}</div>
-        </td>
-        ${cells}
-        <td style="padding:6px 4px;font-weight:bold;font-size:15px;color:var(--blue);background:rgba(0,39,76,0.04);text-align:center;min-width:36px;">${totals[pi].any?totals[pi].t:'—'}</td>
-      </tr>`;
-    }).join('');
-
-    return`<div style="margin-bottom:12px;">
-      <table style="border-collapse:collapse;width:100%;">
-        <thead>
-          <tr>
-            <th style="background:var(--blue);color:var(--maize);padding:7px 8px;text-align:left;font-size:12px;font-weight:bold;">${label}</th>
-            ${hdrHoles}
-            <th style="background:var(--blue);color:var(--maize);padding:6px 4px;font-size:10px;">TOT</th>
-          </tr>
-          <tr><td style="${parStyle}text-align:left;padding-left:8px;">Par</td>${hdrPar}<td style="${parStyle}"></td></tr>
-          <tr><td style="${siStyle}text-align:left;padding-left:8px;">SI</td>${hdrSI}<td style="${siStyle}"></td></tr>
-        </thead>
-        <tbody>${playerRows}</tbody>
-      </table>
-    </div>`;
-  }
-
-  // ── BUILD MODAL ─────────────────────────────────────────────────────────────
+  const{hd2,par,si}=holeInfo(currentHole);
+  const holeIdx=holes.indexOf(currentHole);
+  const prevHole=holeIdx>0?holes[holeIdx-1]:null;
+  const nextHole=holeIdx<holes.length-1?holes[holeIdx+1]:null;
+  const hd=hDiff(m), absHd=Math.abs(hd);
   const res=mResult(m);
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
-  const t1l=mLabel(m,1),t2l=mLabel(m,2);
-  const hd=hDiff(m),absHd=Math.abs(hd);
-  const recv=hd<0?state.team1.name:hd>0?state.team2.name:'';
-  const courseName=cd?cd.name:'';
-  const bodyHTML=isInd
-    ?(m.totalHoles===18?indBlock(front,'Front 9')+indBlock(back,'Back 9'):indBlock(holes,'Holes'))
-    :(m.totalHoles===18?teamBlock(front,'Front 9')+teamBlock(back,'Back 9'):teamBlock(holes,'Holes'));
 
-  modal=`<div class="modal" onclick="event.stopPropagation()" style="padding:16px 14px;">
-    <!-- Header -->
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
-      <div>
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-family:Arial;margin-bottom:4px;">${FORMATS[m.format]||m.format}</div>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-size:16px;font-weight:bold;color:${state.team1.color};">${t1l}</span>
-          <span style="font-size:12px;color:var(--text-dim);">vs</span>
-          <span style="font-size:16px;font-weight:bold;color:${state.team2.color};">${t2l}</span>
+  // Yardage for this hole
+  function playerYds(pid){ const y=getHoleYards(m,currentHole,pid); return y?`<span style="font-size:11px;color:var(--text-muted);">${y}y</span>`:''; }
+
+  // Hole progress dots
+  let progressDots='';
+  holes.forEach(h=>{
+    const d=m.holes[h]||{};
+    let cls='pending';
+    if(isInd){
+      const ipids=m.indPlayers||[];const ipls=ipids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
+      const iminH=ipls.length?Math.min(...ipls.map(p=>p.handicap||0)):0;
+      const idiffs=ipls.map(p=>Math.round(((p.handicap||0)-iminH)*(m.hdcpPercent||100)/100));
+      const isides=m.indPlayerSides||{};const hsi=holeSI(m,h);
+      const nets=ipls.map((_,pi)=>{const r=d['p'+pi];if(r==null)return null;return r-strokesOn(idiffs[pi],hsi,m.totalHoles);});
+      const valid=nets.filter(n=>n!==null);
+      if(valid.length>=2){const mn=Math.min(...valid);const wi=nets.findIndex(n=>n===mn);const tied=nets.filter(n=>n===mn).length>1;cls=tied?'halve':isides[ipids[wi]]==='2'?'win2':'win1';}
+    } else {
+      if(d.t1!=null&&d.t2!=null){const hsi=holeSI(m,h),st=strokesOn(hd,hsi,m.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
+    }
+    const isCurrent=h===currentHole;
+    progressDots+=`<div onclick="openScorecard(${mi},${h})" style="cursor:pointer;width:${isCurrent?'18px':'12px'};height:${isCurrent?'18px':'12px'};border-radius:${isCurrent?'50%':'3px'};background:${isCurrent?'var(--maize)':cls==='win1'?'var(--blue)':cls==='win2'?'var(--maize)':cls==='halve'?'rgba(0,39,76,0.3)':'rgba(0,39,76,0.1)'};border:${isCurrent?'2px solid var(--blue)':'none'};transition:all 0.15s;flex-shrink:0;"></div>`;
+  });
+
+  // Score inputs — team or individual
+  let scoreInputs='';
+  if(isInd){
+    const pids=m.indPlayers||[];
+    const players=pids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
+    const pcolors=pids.map((_,i)=>AVC[i%AVC.length]);
+    const cSides=m.indPlayerSides||{};
+    const minH=players.length?Math.min(...players.map(p=>p.handicap||0)):0;
+    const diffs=players.map(p=>Math.round(((p.handicap||0)-minH)*(m.hdcpPercent||100)/100));
+    const isPar3=par===3;
+
+    // Pinnies — who has it this hole
+    const pinnies=(hd2.pinnies||[]);
+    const ctpPid=hd2.ctp||null;
+
+    scoreInputs=players.map((p,pi)=>{
+      const raw=hd2['p'+pi];
+      const st=strokesOn(diffs[pi],si,m.totalHoles);
+      const tc=cSides[p.id]==='2'?state.team2.color:state.team1.color;
+      const hasPinnie=pinnies.includes(p.id);
+      const hasCtp=ctpPid===p.id;
+      const yds=getHoleYards(m,currentHole,p.id);
+      const teeName=getPlayerTeeName(m,p.id);
+      const cls=getScoreCls(raw,par);
+      return`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.07);">
+        <div style="width:36px;height:36px;border-radius:50%;background:${tc};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <span style="font-size:13px;font-weight:bold;color:#fff;">${p.name[0]}</span>
         </div>
-        ${courseName?`<div style="font-size:11px;color:var(--green-light);font-family:Arial;margin-top:3px;">⛳ ${courseName}</div>`:''}
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:baseline;gap:6px;">
+            <span style="font-size:15px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+            <span style="font-size:11px;color:var(--text-muted);">HCP${p.handicap}${st>0?` <span style="color:${pcolors[pi]};font-weight:bold;">+${st}</span>`:''}${teeName?' · '+teeName:''}</span>
+            ${yds?`<span style="font-size:11px;color:var(--text-dim);">${yds}y</span>`:''}
+          </div>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+            <button onclick="togglePinnieHole(${mi},${currentHole},'${p.id}',${hasPinnie?'false':'true'})" 
+              style="display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;border:1.5px solid ${hasPinnie?'#2d6a4f':'rgba(0,39,76,0.15)'};background:${hasPinnie?'rgba(46,125,50,0.12)':'#fff'};cursor:pointer;font-size:12px;font-weight:bold;color:${hasPinnie?'#2d6a4f':'var(--text-muted)'};">
+              🚩 Pinnie${hasPinnie?' ✓':''}
+            </button>
+            ${isPar3?`<button onclick="toggleCtpHole(${mi},${currentHole},'${p.id}',${hasCtp?'false':'true'})"
+              style="display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;border:1.5px solid ${hasCtp?'#7A5900':'rgba(0,39,76,0.15)'};background:${hasCtp?'rgba(255,203,5,0.15)':'#fff'};cursor:pointer;font-size:12px;font-weight:bold;color:${hasCtp?'#7A5900':'var(--text-muted)'};">
+              ⛳ CTP${hasCtp?' ✓':''}
+            </button>`:''}
+          </div>
+        </div>
+        <input class="sc-input ${cls}" type="number" min="1" max="15" 
+          value="${raw!=null?raw:''}" placeholder="—"
+          onchange="updHoleIndAndRefresh(${mi},${currentHole},${pi},this.value,${par})"
+          style="width:56px;font-size:22px;text-align:center;font-weight:bold;flex-shrink:0;padding:8px 4px;">
+      </div>`;
+    }).join('');
+  } else {
+    // Team match
+    const teams=[
+      {label:mLabel(m,1),color:state.team1.color,key:'t1',hcp:avgHT(m.team1Players),pids:m.team1Players||[]},
+      {label:mLabel(m,2),color:state.team2.color,key:'t2',hcp:avgHT(m.team2Players),pids:m.team2Players||[]}
+    ];
+    const st=strokesOn(hd,si,m.totalHoles);
+    const recv=st<0?0:st>0?1:-1;
+    scoreInputs=teams.map((t,ti)=>{
+      const raw=hd2[t.key];
+      const cls=getScoreCls(raw,par);
+      const gets=recv===ti;
+      const yds=getHoleYards(m,currentHole,t.pids[0]);
+      const teeName=getPlayerTeeName(m,t.pids[0]);
+      return`<div style="display:flex;align-items:center;gap:10px;padding:14px;border-bottom:1px solid rgba(0,39,76,0.07);">
+        <div style="width:38px;height:38px;border-radius:50%;background:${t.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <span style="font-size:12px;font-weight:bold;color:#fff;">${t.label.split('/')[0].trim()[0]}</span>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:15px;font-weight:bold;color:var(--blue);">${t.label}</span>
+            <span style="font-size:11px;color:var(--text-muted);">HCP ${t.hcp}</span>
+            ${gets?`<span style="font-size:11px;font-weight:bold;padding:2px 7px;border-radius:10px;background:rgba(0,39,76,0.1);color:var(--blue);">+1 stroke</span>`:''}
+          </div>
+          ${yds||teeName?`<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">${teeName||''}${teeName&&yds?' · ':''}${yds?yds+'y':''}</div>`:''}
+        </div>
+        <input class="sc-input ${cls}" type="number" min="1" max="15"
+          value="${raw!=null?raw:''}" placeholder="—"
+          onchange="updHoleAndRefresh(${mi},${currentHole},'${t.key}',this.value,${par})"
+          style="width:56px;font-size:22px;text-align:center;font-weight:bold;flex-shrink:0;padding:8px 4px;">
+      </div>`;
+    }).join('');
+  }
+
+  const courseName=cd?cd.name:'';
+  const holeLabel=`Hole ${currentHole}`;
+
+  modal=`<div class="modal" onclick="event.stopPropagation()" style="padding:0;overflow:hidden;">
+    <!-- Top bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:2px solid var(--maize);">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">${FORMATS[m.format]||m.format}${courseName?' · '+courseName:''}</div>
+        <div style="font-size:15px;font-weight:bold;color:var(--blue);margin-top:1px;">
+          ${isInd?(m.indPlayers||[]).map(id=>state.players.find(p=>p.id===id)?.name.split(' ')[0]).filter(Boolean).join(' · '):`${mLabel(m,1)} vs ${mLabel(m,2)}`}
+        </div>
       </div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
-    <!-- Handicap info -->
-    ${absHd>0?`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(0,39,76,0.05);border-radius:var(--radius);margin-bottom:12px;border-left:3px solid var(--blue);">
-      <span style="font-size:13px;color:var(--blue);">🏌️ <b>${recv}</b> gets ${absHd} stroke${absHd!==1?'s':''} <span style="color:var(--text-muted);font-size:11px;">(${m.hdcpPercent||100}% allowance)</span></span>
-    </div>`:''}
-    <!-- Scorecard -->
-    <div class="sc-wrap" style="margin:0 -14px;">${bodyHTML}</div>
-    <!-- Status bar -->
-    <div id="sc-status" style="margin-top:12px;padding:10px;background:var(--blue);border-radius:var(--radius);text-align:center;">
-      <span class="status-bubble ${sc}" style="font-size:16px;background:rgba(255,255,255,0.15);color:#fff;">${res.status}</span>
+    <!-- Hole header -->
+    <div style="background:var(--blue);padding:12px 16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div>
+          <div style="font-size:28px;font-weight:bold;color:#fff;line-height:1;">${holeLabel}</div>
+          <div style="display:flex;gap:12px;margin-top:4px;">
+            <span style="font-size:13px;color:var(--maize);font-weight:bold;">Par ${par}</span>
+            <span style="font-size:13px;color:rgba(255,255,255,0.6);">SI ${si}</span>
+            ${absHd>0?`<span style="font-size:11px;color:rgba(255,255,255,0.5);">${hd<0?mLabel(m,1):mLabel(m,2).split('/')[0]} +${Math.abs(strokesOn(hd,si,m.totalHoles))||''}</span>`:''}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div class="status-bubble ${sc}" style="background:rgba(255,255,255,0.15);color:#fff;font-size:16px;">${res.status}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.5);margin-top:3px;">${holes.indexOf(currentHole)+1}/${holes.length}</div>
+        </div>
+      </div>
+      <!-- Progress dots -->
+      <div style="display:flex;gap:4px;align-items:center;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;">${progressDots}</div>
+    </div>
+    <!-- Score inputs -->
+    <div style="background:#fff;">${scoreInputs}</div>
+    <!-- Prev / Next -->
+    <div style="display:flex;gap:8px;padding:12px 14px;border-top:1px solid rgba(0,39,76,0.08);background:#fff;">
+      <button class="btn btn-ghost" onclick="${prevHole?`openScorecard(${mi},${prevHole})`:'closeModal()'}" style="flex:1;">
+        ${prevHole?'← Prev':'Close'}
+      </button>
+      <button class="btn btn-gold" onclick="${nextHole?`openScorecard(${mi},${nextHole})`:'closeModal()'}" style="flex:1;">
+        ${nextHole?'Next →':'Done ✓'}
+      </button>
     </div>
   </div>`;
   render();
+}
+
+// Helpers that save then re-render the scorecard on same hole
+function updHoleAndRefresh(mi,h,key,v,par){
+  updHole(mi,h,key,v,par);
+  // Brief delay so input value is committed before re-render
+  setTimeout(()=>openScorecard(mi,h),50);
+}
+function updHoleIndAndRefresh(mi,h,pi,v,par){
+  updHoleInd(mi,h,pi,'sc-'+mi+'-'+h+'-'+pi,v,par);
+  setTimeout(()=>openScorecard(mi,h),50);
+}
+function togglePinnieHole(mi,h,pid,add){
+  const m=state.matches[mi];
+  if(!m.holes[h]) m.holes[h]={};
+  if(!m.holes[h].pinnies) m.holes[h].pinnies=[];
+  if(add==='true'||add===true){if(!m.holes[h].pinnies.includes(pid))m.holes[h].pinnies.push(pid);}
+  else{m.holes[h].pinnies=m.holes[h].pinnies.filter(id=>id!==pid);}
+  save();pushToCloud();
+  openScorecard(mi,h);
+}
+function toggleCtpHole(mi,h,pid,add){
+  const m=state.matches[mi];
+  if(!m.holes[h]) m.holes[h]={};
+  const current=m.holes[h].ctp;
+  m.holes[h].ctp=(add==='true'||add===true)?pid:null;
+  save();pushToCloud();
+  openScorecard(mi,h);
 }
 
 function getTeeName(m){const cd=m.courseData||state.settings.courseData;if(!cd||!cd.tees)return'';return cd.tees[m.selectedTee||0]||'';}
@@ -965,27 +1000,29 @@ function renderMatchModal(){
   // Per-player tee selector — build list of all players in this match
   const matchPids=isInd?[...(d.indPlayers||[])]:[...(d.team1Players||[]),...(d.team2Players||[])];
   const matchPlayers=matchPids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
-  const teeSel=cd&&cd.tees&&cd.tees.length>0
-    ?'<div class="form-group"><label class="form-label">Tees</label>'
-      +(cd.tees.length===1
-        // Only one tee — just show it
-        ?`<div style="font-size:12px;color:var(--blue);padding:4px 0;">${cd.tees[0]}</div>`
-        // Multiple tees — per-player picker
-        :(matchPlayers.length>0
-          ?matchPlayers.map(p=>{
-            const ac=AVC[state.players.findIndex(pl=>pl.id===p.id)%AVC.length];
-            const curTee=(d.playerTees||{})[p.id]!=null?(d.playerTees||{})[p.id]:(d.selectedTee||0);
-            return`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(0,39,76,0.06);">
-              <span style="width:8px;height:8px;border-radius:50%;background:${ac};flex-shrink:0;"></span>
-              <span style="font-size:12px;font-weight:bold;color:var(--blue);min-width:70px;">${p.name.split(' ')[0]}<br><span style="font-size:10px;color:var(--text-muted);font-weight:normal;">HCP ${p.handicap}</span></span>
-              <div style="display:flex;gap:4px;flex-wrap:wrap;">${cd.tees.map((t,i)=>{const ti=d.teeInfo&&d.teeInfo[i];const sel=curTee===i;return`<div onclick="setPlayerTee('${p.id}',${i})" style="padding:5px 10px;border-radius:var(--radius);border:2px solid ${sel?'var(--blue)':'rgba(0,39,76,0.15)'};background:${sel?'var(--blue)':'#fff'};cursor:pointer;text-align:center;"><div style="font-size:11px;font-weight:bold;color:${sel?'#fff':'var(--blue)'};">${t}</div>${ti&&ti.total_yards?`<div style="font-size:9px;color:${sel?'rgba(255,255,255,0.75)':'var(--text-muted)'};">${ti.total_yards}y</div>`:''}</div>`;}).join('')}</div>
-            </div>`;
-          }).join('')
-          // No players picked yet — show a default selector
-          :`<div style="margin-bottom:6px;"><div style="font-size:11px;color:var(--text-muted);font-family:Arial;margin-bottom:6px;">Select players above to assign individual tees, or pick a default:</div><div style="display:flex;gap:6px;flex-wrap:wrap;">${cd.tees.map((t,i)=>{const ti=d.teeInfo&&d.teeInfo[i];return`<div onclick="draftSet('selectedTee',${i})" style="padding:6px 12px;border-radius:var(--radius);border:2px solid ${(d.selectedTee||0)===i?'var(--blue)':'var(--border)'};background:${(d.selectedTee||0)===i?'var(--blue)':'#fff'};cursor:pointer;"><div style="font-size:12px;font-weight:bold;color:${(d.selectedTee||0)===i?'#fff':'var(--blue)'};">${t}</div>${ti&&ti.total_yards?`<div style="font-size:10px;color:${(d.selectedTee||0)===i?'rgba(255,255,255,0.75)':'var(--text-muted)'};">${ti.total_yards} yds · ${ti.rating}/${ti.slope}</div>`:''}</div>`;}).join('')}</div></div>`)
-        )
-      +'</div>'
-    :'';
+  const teeSel=cd&&cd.tees&&cd.tees.length>0?(()=>{
+    if(cd.tees.length===1) return`<div class="form-group"><label class="form-label">Tee</label><div style="font-size:13px;color:var(--blue);padding:4px 0;font-weight:bold;">${cd.tees[0]}</div></div>`;
+    const players=matchPlayers.length>0?matchPlayers:[];
+    if(!players.length) return`<div class="form-group"><label class="form-label">Default Tee</label><div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;">${cd.tees.map((t,i)=>{const sel=(d.selectedTee||0)===i;const tInfo=d.teeInfo&&d.teeInfo[i];const yds=tInfo&&tInfo.total_yards?tInfo.total_yards:(cd.holes?cd.holes.reduce((s,h)=>s+(h.tees&&h.tees[i]?h.tees[i]:0),0):0);return`<div onclick="draftSet('selectedTee',${i})" style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:2px solid ${sel?'var(--blue)':'rgba(0,39,76,0.15)'};background:${sel?'var(--blue)':'#fff'};cursor:pointer;text-align:center;min-width:64px;"><div style="font-size:13px;font-weight:bold;color:${sel?'#fff':'var(--blue)'};">${t}</div><div style="font-size:10px;color:${sel?'rgba(255,255,255,0.8)':'var(--text-muted)'};">${yds?yds+'y':'—'}</div></div>`;}).join('')}</div></div>`;
+    return`<div class="form-group"><label class="form-label">Tees</label><div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">${players.map((p,idx)=>{
+      const ac=AVC[state.players.findIndex(pl=>pl.id===p.id)%AVC.length];
+      const curTee=(d.playerTees||{})[p.id]!=null?(d.playerTees||{})[p.id]:(d.selectedTee||0);
+      const selTee=cd.tees[curTee]||cd.tees[0];
+      const ti=d.teeInfo&&d.teeInfo[curTee];
+      return`<div style="display:flex;align-items:center;padding:10px 12px;${idx>0?'border-top:1px solid rgba(0,39,76,0.07)':''};">
+        <div style="display:flex;align-items:center;gap:7px;width:90px;flex-shrink:0;">
+          <span style="width:9px;height:9px;border-radius:50%;background:${ac};flex-shrink:0;"></span>
+          <div>
+            <div style="font-size:13px;font-weight:bold;color:var(--blue);line-height:1.2;">${p.name.split(' ')[0]}</div>
+            <div style="font-size:10px;color:var(--text-muted);">HCP ${p.handicap}</div>
+          </div>
+        </div>
+        <div style="flex:1;display:flex;gap:5px;overflow-x:auto;padding:2px 0;-webkit-overflow-scrolling:touch;">
+          ${cd.tees.map((t,i)=>{const sel=curTee===i;const tInfo=d.teeInfo&&d.teeInfo[i];const yds=tInfo&&tInfo.total_yards?tInfo.total_yards:(cd.holes?cd.holes.reduce((s,h)=>s+(h.tees&&h.tees[i]?h.tees[i]:0),0):0);return`<div onclick="setPlayerTee('${p.id}',${i})" style="flex-shrink:0;padding:6px 12px;border-radius:20px;border:2px solid ${sel?'var(--blue)':'rgba(0,39,76,0.15)'};background:${sel?'var(--blue)':'#fff'};cursor:pointer;text-align:center;min-width:60px;"><div style="font-size:12px;font-weight:bold;color:${sel?'#fff':'var(--blue)'};">${t}</div><div style="font-size:10px;color:${sel?'rgba(255,255,255,0.8)':'var(--text-muted)'};">${yds?yds+'y':'—'}</div></div>`;}).join('')}
+        </div>
+      </div>`;
+    }).join('')}</div></div>`;
+  })():'';
   const fmtDesc=FORMAT_DESC[d.format]||'';
   // Player pickers
   function chips(ids,color){if(!ids.length)return`<span style="font-size:11px;color:var(--text-dim);font-family:Arial;">None</span>`;return ids.map(id=>{const p=allPlayers.find(pl=>pl.id===id);return p?`<span class="selected-chip" style="background:${color}22;color:${color};border:1px solid ${color}44;">${p.name.split(' ')[0]}</span>`:''}).join('');}
@@ -1071,14 +1108,14 @@ function renderMatchModal(){
     </div>
     <div style="padding:8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:12px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-family:Arial;">
-        <input type="checkbox" ${d.linkedTeamMatch?'checked':''} onchange="draftSet('linkedTeamMatch',this.checked)" style="width:16px;height:16px;accent-color:var(--blue);">
+        <input type="checkbox" ${d.linkedTeamMatch?'checked':''} onchange="const v=this.checked;draftSet('linkedTeamMatch',v)" style="width:16px;height:16px;accent-color:var(--blue);">
         <div><div style="font-weight:bold;color:var(--blue);">Also create Team Match</div>
         <div style="font-size:10px;color:var(--text-muted);">Individual scores automatically feed into a team match result</div></div>
       </label>
     </div>`}
     ${!isInd&&!isEdit?`<div style="padding:8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:12px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-family:Arial;">
-        <input type="checkbox" ${d.createIndividuals?'checked':''} onchange="draftSet('createIndividuals',this.checked)" style="width:16px;height:16px;accent-color:var(--blue);">
+        <input type="checkbox" ${d.createIndividuals?'checked':''} onchange="const v=this.checked;draftSet('createIndividuals',v)" style="width:16px;height:16px;accent-color:var(--blue);">
         <div><div style="font-weight:bold;color:var(--blue);">Also create Individual matches</div>
         <div style="font-size:10px;color:var(--text-muted);">One singles match per player pairing — results feed into this team match</div></div>
       </label>
@@ -1225,7 +1262,7 @@ function applyCourse(course,fs){
   if(typeof course==='string'){try{course=JSON.parse(course);}catch(e){}}
   // fs can arrive as boolean false, 0, "false", or "0" — treat all falsy + "false"/"0" as settings=false
   const forSettings=(fs&&fs!=='false'&&fs!==0&&fs!=='0');
-  const clean={name:course.name,location:course.location||'',total_par:course.total_par,holes:course.holes||[],tees:course.tees||null};
+  const clean={name:course.name,location:course.location||'',total_par:course.total_par,holes:course.holes||[],tees:course.tees||null,teeInfo:course.teeInfo||null};
   if(forSettings){
     mutate(()=>{state.settings.courseData=clean;});
     modal=null;render();
