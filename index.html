@@ -268,7 +268,16 @@ function renderSyncBar(){
 }
 
 /* \u2550\u2550\u2550 MATH \u2550\u2550\u2550 */
-function teamPts(tn){return state.matches.reduce((pts,m)=>{const r=mResult(m);if(r.winner==='team'+tn)return pts+r.points;if(r.winner==='half')return pts+0.5;return pts;},0);}
+function teamPts(tn){
+  // For extra teams (idx>=3), check which players are on that team and count their match wins
+  if(tn===1||tn===2) return state.matches.reduce((pts,m)=>{const r=mResult(m);if(r.winner==='team'+tn)return pts+r.points;if(r.winner==='half')return pts+0.5;return pts;},0);
+  const et=getTeamByIdx(tn);if(!et)return 0;
+  const pids=et.players||[];
+  return state.matches.reduce((pts,m)=>{
+    const r=mResult(m);const onT1=(m.team1Players||[]).some(id=>pids.includes(id));const onT2=(m.team2Players||[]).some(id=>pids.includes(id));
+    if(r.winner==='team1'&&onT1)return pts+r.points;if(r.winner==='team2'&&onT2)return pts+r.points;if(r.winner==='half'&&(onT1||onT2))return pts+0.5;return pts;
+  },0);
+}
 function mResult(m){if(m.format==='stroke'||m.format==='stableford')return strokeResult(m);if(m.matchType==='individual')return indResult(m);return mpResult(m);}
 function mpResult(m){
   let up=0;const holes=m.holes||{};
@@ -435,7 +444,7 @@ async function createRoom(){
     eventName:eventName.trim()||'The Cup',
     team1:{name:'Eagles',color:'#00274C',players:[]},
     team2:{name:'Falcons',color:'#FFCB05',players:[]},
-    players:[],matches:[],bets:[],history:[],sessions:[],savedCourses:[],pools:{pinnies:{active:false,amount:5,participants:[]},ctp:{active:false,amount:10,participants:[]},birdies:{active:false,amount:2,participants:[]},skins:{active:false,amount:5,participants:[]}},
+    players:[],matches:[],bets:[],history:[],sessions:[],savedCourses:[],extraTeams:[],pools:{pinnies:{active:false,amount:5,participants:[]},ctp:{active:false,amount:10,participants:[]},birdies:{active:false,amount:2,participants:[]},skins:{active:false,amount:5,participants:[]}},
     settings:{holes:18,courseData:null},
     apiKey:'WBDTXEE7RFRB6N3GDTE2T76D34',roomCode:newCode,isHost:true,myName:name.trim(),
     eventPassword:'',_completedOpen:false
@@ -465,15 +474,61 @@ function leaveRoom(){
 
 /* \u2550\u2550\u2550 ROOM MODAL \u2550\u2550\u2550 */
 function openRoomModal(){
+  const shareText=`Join "${state.eventName||'The Cup'}" on The Cup Golf App!\n\nEvent: ${state.eventName||'The Cup'}\nRoom Code: ${state.roomCode}\n\nOpen the app at thecupgolfapp.netlify.app and enter this code to join.`;
   modal=`<div class="modal" onclick="event.stopPropagation()">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">Share Event</div><button class="modal-close" onclick="closeModal()">\u2715</button></div>
-    <div style="font-size:12px;color:var(--text-muted);font-family:Arial;margin-bottom:8px;text-align:center;">Share this code with your group</div>
-    <div class="room-code">${state.roomCode}</div>
-    <button class="btn btn-gold w-full" onclick="copyCode()" style="margin-bottom:8px;">Copy Code</button>
-    <div style="font-size:11px;color:var(--text-dim);font-family:Arial;text-align:center;">Everyone with this code sees scores update live</div>
-  </div>`;render();
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid var(--maize);padding-bottom:10px;">
+      <div class="modal-title">Share Event</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <!-- Event name -->
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-family:Arial;margin-bottom:4px;">Event</div>
+      <div style="font-size:20px;font-weight:bold;color:var(--blue);">${state.eventName||'The Cup'}</div>
+    </div>
+    <!-- Room code big display -->
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-family:Arial;margin-bottom:8px;">Room Code</div>
+      <div class="room-code" style="cursor:pointer;" onclick="copyCode()" title="Tap to copy">${state.roomCode}</div>
+      <div style="font-size:11px;color:var(--text-dim);font-family:Arial;margin-top:6px;">Tap the code to copy it</div>
+    </div>
+    <!-- Share buttons -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-gold w-full" onclick="shareEvent()" style="font-size:15px;">
+        📤 Share Event
+      </button>
+      <button class="btn btn-ghost w-full" onclick="copyFullMessage()" style="font-size:14px;">
+        📋 Copy Invite Message
+      </button>
+    </div>
+    <div style="margin-top:14px;padding:12px;background:rgba(0,39,76,0.04);border-radius:var(--radius);font-size:12px;color:var(--text-muted);font-family:Arial;line-height:1.5;white-space:pre-wrap;" id="share-preview">${shareText}</div>
+  </div>`;
+  render();
 }
-function copyCode(){navigator.clipboard.writeText(state.roomCode).then(()=>alert('Code copied: '+state.roomCode));}
+
+function shareEvent(){
+  const shareText='Join "'+( state.eventName||'The Cup')+'" on The Cup Golf App!\n\nEvent: '+(state.eventName||'The Cup')+'\nRoom Code: '+state.roomCode+'\n\nOpen the app at thecupgolfapp.netlify.app and enter this code to join.';
+  if(navigator.share){
+    navigator.share({title:'Join '+( state.eventName||'The Cup'),text:shareText,url:'https://thecupgolfapp.netlify.app'}).catch(()=>{});
+  } else {
+    copyFullMessage();
+  }
+}
+
+function copyFullMessage(){
+  const shareText='Join "'+( state.eventName||'The Cup')+'" on The Cup Golf App!\n\nEvent: '+(state.eventName||'The Cup')+'\nRoom Code: '+state.roomCode+'\n\nOpen the app at thecupgolfapp.netlify.app and enter this code to join.';
+  navigator.clipboard.writeText(shareText).then(()=>{
+    const btn=document.querySelector('#share-preview');
+    if(btn){btn.style.background='rgba(46,125,50,0.1)';btn.style.borderLeft='3px solid #1B5E20';setTimeout(()=>{btn.style.background='';btn.style.borderLeft='';},1500);}
+    alert('Invite message copied!');
+  }).catch(()=>alert('Code: '+state.roomCode));
+}
+
+function copyCode(){
+  navigator.clipboard.writeText(state.roomCode).then(()=>{
+    const el=document.querySelector('.room-code');
+    if(el){const orig=el.style.background;el.style.background='rgba(46,125,50,0.15)';setTimeout(()=>el.style.background=orig,800);}
+  }).catch(()=>alert(state.roomCode));
+}
 
 /* \u2550\u2550\u2550 MUTATE \u2550\u2550\u2550 */
 function mutate(fn){fn();save();pushToCloud();}
@@ -1298,7 +1353,7 @@ function renderMatchModal(){
   const d=matchDraft,isEdit=d.editIdx!=null;
   const allPlayers=state.players;
   const t1pids=state.team1.players||[],t2pids=state.team2.players||[];
-  const assigned=new Set([...t1pids,...t2pids]);
+  const assigned=new Set([...t1pids,...t2pids,...(state.extraTeams||[]).flatMap(t=>t.players||[])]);
   const unassigned=allPlayers.filter(p=>!assigned.has(p.id));
   const isInd=d.matchType==='individual';
   const cn=d.courseData?d.courseData.name:(state.settings.courseData?state.settings.courseData.name:'');
@@ -1413,20 +1468,24 @@ function renderMatchModal(){
       <div class="player-picker">${allPlayers.map(p=>indPlayerRow(p)).join('')}</div>
     </div>
     <div style="padding:8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:12px;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-family:Arial;">
-        <input type="checkbox" id="cb-linkedTeam" ${d.linkedTeamMatch?'checked':''} style="width:18px;height:18px;accent-color:var(--blue);flex-shrink:0;">
-        <div onclick="matchDraft.linkedTeamMatch=!matchDraft.linkedTeamMatch;renderMatchModal();" style="flex:1;cursor:pointer;">
-          <div style="font-weight:bold;color:var(--blue);">Also create Team Match</div>
-          <div style="font-size:10px;color:var(--text-muted);">Individual scores automatically feed into a team match result</div>
+      <div onclick="matchDraft.linkedTeamMatch=!matchDraft.linkedTeamMatch;renderMatchModal();" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:4px 0;">
+        <div style="width:48px;height:28px;border-radius:14px;background:${d.linkedTeamMatch?'var(--blue)':'rgba(0,39,76,0.15)'};flex-shrink:0;position:relative;transition:background 0.2s;">
+          <div style="position:absolute;top:3px;${d.linkedTeamMatch?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.25);transition:all 0.2s;"></div>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:bold;color:var(--blue);font-size:13px;">Also create Team Match</div>
+          <div style="font-size:11px;color:var(--text-muted);">Individual scores automatically feed into a team match result</div>
         </div>
       </label>
     </div>`}
     ${!isInd&&!isEdit?`<div style="padding:8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:12px;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-family:Arial;">
-        <input type="checkbox" id="cb-createInd" ${d.createIndividuals?'checked':''} style="width:18px;height:18px;accent-color:var(--blue);flex-shrink:0;">
-        <div onclick="matchDraft.createIndividuals=!matchDraft.createIndividuals;renderMatchModal();" style="flex:1;cursor:pointer;">
-          <div style="font-weight:bold;color:var(--blue);">Also create Individual matches</div>
-          <div style="font-size:10px;color:var(--text-muted);">One match with all players — scores tracked individually</div>
+      <div onclick="matchDraft.createIndividuals=!matchDraft.createIndividuals;renderMatchModal();" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:4px 0;">
+        <div style="width:48px;height:28px;border-radius:14px;background:${d.createIndividuals?'var(--blue)':'rgba(0,39,76,0.15)'};flex-shrink:0;position:relative;transition:background 0.2s;">
+          <div style="position:absolute;top:3px;${d.createIndividuals?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.25);transition:all 0.2s;"></div>
+        </div>
+        <div style="flex:1;">
+          <div style="font-weight:bold;color:var(--blue);font-size:13px;">Also create Individual matches</div>
+          <div style="font-size:11px;color:var(--text-muted);">One match with all players — scores tracked individually</div>
         </div>
       </label>
     </div>`:''}
@@ -1616,23 +1675,30 @@ function submitManual(fs){
 
 /* \u2550\u2550\u2550 TEAMS \u2550\u2550\u2550 */
 function renderTeams(){
+  const teams=allTeams();
+  const cols=teams.length<=2?'1fr 1fr':teams.length===3?'1fr 1fr 1fr':'1fr 1fr';
   return`<div class="section-header"><span class="section-title">Roster</span>
-    <div style="display:flex;gap:6px;">${state.isHost?`<button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="openAutoTeams()">Auto Teams</button><button class="btn btn-sm btn-gold" onclick="openPlayerModal(null)">+ Player</button>`:''}</div>
+    <div style="display:flex;gap:6px;">${state.isHost?`<button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="openAutoTeams()">Auto</button><button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="addExtraTeam()">+ Team</button><button class="btn btn-sm btn-gold" onclick="openPlayerModal(null)">+ Player</button>`:''}</div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px;margin-bottom:12px;">
-    ${[1,2].map(tn=>{const team=tn===1?state.team1:state.team2,color=tn===1?state.team1.color:'#4fc3f7';return`<div class="team-card t${tn}"><div style="height:3px;border-radius:2px;background:${team.color};margin-bottom:10px;"></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><div style="font-size:14px;font-weight:bold;color:${color};">${team.name}</div>${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openEditTeam(${tn})">Edit</button>`:''}</div>
-      <div style="font-size:28px;font-weight:bold;color:var(--maize-dark);text-align:center;padding:4px 0;">${teamPts(tn)}</div>
-      <div style="text-align:center;font-size:10px;color:var(--text-muted);font-family:Arial;margin-bottom:8px;">points</div>
-      <div style="font-size:11px;color:var(--text-muted);font-family:Arial;">Avg HCP: <b style="color:var(--text);">${avgHT(team.players)}</b> \u00b7 ${team.players.length} players</div>
-    </div>`;}).join('')}
+  <div style="display:grid;grid-template-columns:${cols};gap:10px;padding:0 12px;margin-bottom:12px;">
+    ${teams.map(t=>`<div class="team-card" style="border:2px solid ${t.color}44;">
+      <div style="height:3px;border-radius:2px;background:${t.color};margin-bottom:8px;"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="font-size:13px;font-weight:bold;color:${t.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${t.name}</div>
+        ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openEditTeam(${t.idx})" style="flex-shrink:0;font-size:10px;padding:3px 8px;margin-left:4px;">Edit</button>`:''}
+      </div>
+      <div style="font-size:26px;font-weight:bold;color:var(--blue);text-align:center;padding:2px 0;">${teamPts(t.idx)}</div>
+      <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-bottom:4px;">pts</div>
+      <div style="font-size:10px;color:var(--text-muted);font-family:Arial;">HCP ${avgHT(t.players)} · ${(t.players||[]).length} players</div>
+    </div>`).join('')}
   </div>
-  ${[1,2].map(tn=>{const team=tn===1?state.team1:state.team2,color=tn===1?state.team1.color:'#4fc3f7',players=(team.players||[]).map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
-    return`<div class="section-header" style="padding-top:8px;"><span class="section-title" style="color:${color};">${team.name}</span></div>
-      <div style="padding:0 16px;">${players.length?players.map(p=>renderPRow(p,tn)).join(''):`<div class="empty-state" style="padding:12px;">No players.</div>`}</div>`;}).join('')}
+  ${teams.map(t=>{const players=(t.players||[]).map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
+    return`<div class="section-header" style="padding-top:8px;"><span class="section-title" style="color:${t.color};">${t.name}</span></div>
+      <div style="padding:0 12px;">${players.length?players.map(p=>renderPRow(p,t.idx)).join(''):`<div class="empty-state" style="padding:12px;">No players yet.</div>`}</div>`;}).join('')}
   <div class="section-header" style="padding-top:8px;"><span class="section-title">Unassigned</span></div>
-  <div style="padding:0 16px;">${renderUnassigned()}</div>`;
+  <div style="padding:0 12px;">${renderUnassigned()}</div>`;
 }
+
 function renderPRow(p,tn){
   const ac=AVC[state.players.findIndex(pl=>pl.id===p.id)%AVC.length],init=p.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2),r=pRecord(p.id);
   const isMe=p.name===state.myName;
@@ -1640,22 +1706,81 @@ function renderPRow(p,tn){
     <div class="player-avatar" style="background:${ac}22;color:${ac};">${init}</div>
     <div style="flex:1;"><div style="font-size:13px;font-weight:bold;">${p.name}${isMe?` <span class="badge badge-gold" style="font-size:9px;">You</span>`:''}</div><div style="font-size:11px;color:var(--text-muted);font-family:Arial;">HCP ${p.handicap} \u00b7 ${r.w}W ${r.l}L ${r.h}H</div></div>
     ${state.isHost?`<div style="display:flex;gap:4px;">
-      ${tn===0?`<button class="btn btn-sm btn-ghost" onclick="assignP('${p.id}',1)" style="color:${state.team1.color};font-size:10px;">${state.team1.name}</button><button class="btn btn-sm btn-ghost" onclick="assignP('${p.id}',2)" style="color:#4fc3f7;font-size:10px;">${state.team2.name}</button>`:`<button class="btn btn-sm btn-ghost" onclick="removeP('${p.id}',${tn})" style="font-size:10px;">Remove</button>`}
+      ${tn===0?allTeams().map(t=>`<button class="btn btn-sm btn-ghost" onclick="assignP('${p.id}',${t.idx})" style="color:${t.color};font-size:10px;border-color:${t.color}44;">${t.name}</button>`).join(''):`<button class="btn btn-sm btn-ghost" onclick="removeP('${p.id}',${tn})" style="font-size:10px;">Remove</button>`}
       <button class="btn btn-sm btn-ghost" onclick="openPlayerModal('${p.id}')">\u270e</button>
       <button class="btn btn-sm btn-ghost" onclick="delPlayer('${p.id}')">\u2715</button>
     </div>`:''}
   </div>`;
 }
-function renderUnassigned(){const a=new Set([...(state.team1.players||[]),...(state.team2.players||[])]);const ua=state.players.filter(p=>!a.has(p.id));return ua.length?ua.map(p=>renderPRow(p,0)).join(''):`<div class="empty-state" style="padding:12px;">All players assigned.</div>`;}
+function renderUnassigned(){const a=new Set([...(state.team1.players||[]),...(state.team2.players||[]),...(state.extraTeams||[]).flatMap(t=>t.players||[])]);const ua=state.players.filter(p=>!a.has(p.id));return ua.length?ua.map(p=>renderPRow(p,0)).join(''):`<div class="empty-state" style="padding:12px;">All players assigned.</div>`;}
 function pRecord(pid){let w=0,l=0,h=0;state.matches.forEach(m=>{const i1=(m.team1Players||[]).includes(pid),i2=(m.team2Players||[]).includes(pid);if(!i1&&!i2)return;const r=mResult(m);if(r.winner==='team1'&&i1)w++;else if(r.winner==='team2'&&i2)w++;else if(r.winner==='half')h++;else if(r.winner)l++;});return{w,l,h};}
 function openPlayerModal(eid){if(!state.isHost)return;const p=eid?state.players.find(pl=>pl.id===eid):null;modal=`<div class="modal" onclick="event.stopPropagation()"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">${p?'Edit':'Add'} Player</div><button class="modal-close" onclick="closeModal()">\u2715</button></div><div class="form-group"><label class="form-label">Full Name</label><input type="text" id="p-name" value="${p?p.name:''}" placeholder="John Smith"></div><div class="form-group"><label class="form-label">Handicap Index</label><input type="number" id="p-hdcp" step="0.1" value="${p?p.handicap:10}" min="0" max="54"></div><button class="btn btn-gold w-full" onclick="savePlayer('${eid||''}')">${p?'Save':'Add Player'}</button></div>`;render();}
 function savePlayer(eid){const name=document.getElementById('p-name').value.trim(),handicap=parseFloat(document.getElementById('p-hdcp').value)||0;if(!name)return;mutate(()=>{if(eid){const i=state.players.findIndex(p=>p.id===eid);if(i>=0)state.players[i]={...state.players[i],name,handicap};}else state.players.push({id:'p'+Date.now(),name,handicap});});modal=null;render();}
-function openEditTeam(tn){if(!state.isHost)return;const t=tn===1?state.team1:state.team2;modal=`<div class="modal" onclick="event.stopPropagation()"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">Edit Team ${tn}</div><button class="modal-close" onclick="closeModal()">\u2715</button></div><div class="form-group"><label class="form-label">Name</label><input type="text" id="t-name" value="${t.name}"></div><div class="form-group"><label class="form-label">Color</label><input type="color" id="t-color" value="${t.color}" style="height:36px;padding:2px 4px;"></div><button class="btn btn-gold w-full" onclick="saveTeam(${tn})">Save</button></div>`;render();}
-function saveTeam(tn){const name=document.getElementById('t-name').value.trim(),color=document.getElementById('t-color').value;if(!name)return;mutate(()=>{if(tn===1){state.team1.name=name;state.team1.color=color;}else{state.team2.name=name;state.team2.color=color;}});modal=null;render();}
+function openEditTeam(tn){
+  if(!state.isHost)return;
+  const t=getTeamByIdx(tn)||state.team1;
+  const canDelete=tn>=3;
+  modal=`<div class="modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid var(--maize);padding-bottom:10px;">
+      <div class="modal-title">Edit Team</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="form-group"><label class="form-label">Team Name</label><input type="text" id="t-name" value="${t.name}"></div>
+    <div class="form-group"><label class="form-label">Color</label><input type="color" id="t-color" value="${t.color}" style="height:48px;padding:2px 4px;width:100%;border-radius:var(--radius);border:1.5px solid rgba(0,39,76,0.2);cursor:pointer;"></div>
+    <button class="btn btn-gold w-full" onclick="saveTeam(${tn})" style="margin-bottom:8px;">Save</button>
+    ${canDelete?`<button class="btn btn-ghost w-full" onclick="deleteExtraTeam(${tn})" style="color:#C0392B;border-color:rgba(192,57,43,0.2);">Delete Team</button>`:''}
+  </div>`;render();
+}
+function saveTeam(tn){
+  const name=document.getElementById('t-name').value.trim(),color=document.getElementById('t-color').value;
+  if(!name)return;
+  mutate(()=>{
+    if(tn===1){state.team1.name=name;state.team1.color=color;}
+    else if(tn===2){state.team2.name=name;state.team2.color=color;}
+    else{const et=(state.extraTeams||[])[tn-3];if(et){et.name=name;et.color=color;}}
+  });modal=null;render();
+}
+function addExtraTeam(){
+  const colors=['#E65100','#6A1B9A','#00695C','#AD1457','#1565C0','#2E7D32'];
+  const existing=(state.extraTeams||[]).length;
+  mutate(()=>{
+    if(!state.extraTeams)state.extraTeams=[];
+    state.extraTeams.push({name:'Team '+(existing+3),color:colors[existing%colors.length],players:[]});
+  });render();
+}
+function deleteExtraTeam(tn){
+  if(!confirm('Delete this team? Players will become unassigned.'))return;
+  mutate(()=>{
+    const et=(state.extraTeams||[])[tn-3];
+    if(et){
+      // Move players back to unassigned (they stay in state.players, just removed from team)
+    }
+    state.extraTeams.splice(tn-3,1);
+  });modal=null;render();
+}
 function openAutoTeams(){if(!state.isHost)return;const sorted=[...state.players].sort((a,b)=>a.handicap-b.handicap);modal=`<div class="modal" onclick="event.stopPropagation()"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">Auto-Generate Teams</div><button class="modal-close" onclick="closeModal()">\u2715</button></div><div class="form-group"><label class="form-label">Method</label><select id="at-m"><option value="snake">Snake Draft (balanced)</option><option value="random">Random</option><option value="top_bottom">Low vs High HCP</option></select></div>${state.players.length?`${sorted.map(p=>`<div style="font-size:11px;color:var(--text-muted);padding:2px 0;font-family:Arial;">${p.name} (${p.handicap})</div>`).join('')}<button class="btn btn-gold w-full" style="margin-top:12px;" onclick="doAutoTeams()">Generate</button>`:`<div class="empty-state" style="padding:12px;">No players yet.</div>`}</div>`;render();}
 function doAutoTeams(){const m=document.getElementById('at-m').value;let s=[...state.players].sort((a,b)=>a.handicap-b.handicap);let t1=[],t2=[];if(m==='random'){s=s.sort(()=>Math.random()-0.5);s.forEach((p,i)=>{if(i%2===0)t1.push(p.id);else t2.push(p.id);});}else if(m==='top_bottom'){const h=Math.floor(s.length/2);t1=s.slice(0,h).map(p=>p.id);t2=s.slice(h).map(p=>p.id);}else{s.forEach((p,i)=>{const r=Math.floor(i/2);if(r%2===0){if(i%2===0)t1.push(p.id);else t2.push(p.id);}else{if(i%2===0)t2.push(p.id);else t1.push(p.id);}});}mutate(()=>{state.team1.players=t1;state.team2.players=t2;});modal=null;render();}
-function assignP(pid,tn){mutate(()=>{state.team1.players=(state.team1.players||[]).filter(id=>id!==pid);state.team2.players=(state.team2.players||[]).filter(id=>id!==pid);if(tn===1)state.team1.players.push(pid);else state.team2.players.push(pid);});render();}
-function removeP(pid,tn){mutate(()=>{if(tn===1)state.team1.players=state.team1.players.filter(id=>id!==pid);else state.team2.players=state.team2.players.filter(id=>id!==pid);});render();}
+function allTeams(){return[{...state.team1,idx:1},{...state.team2,idx:2},...(state.extraTeams||[]).map((t,i)=>({...t,idx:3+i}))];}
+function getTeamByIdx(idx){if(idx===1)return state.team1;if(idx===2)return state.team2;return(state.extraTeams||[])[idx-3];}
+function assignP(pid,tn){
+  mutate(()=>{
+    // Remove from all teams
+    state.team1.players=(state.team1.players||[]).filter(id=>id!==pid);
+    state.team2.players=(state.team2.players||[]).filter(id=>id!==pid);
+    (state.extraTeams||[]).forEach(t=>{t.players=(t.players||[]).filter(id=>id!==pid);});
+    // Add to target
+    if(tn===1) state.team1.players.push(pid);
+    else if(tn===2) state.team2.players.push(pid);
+    else{const et=(state.extraTeams||[])[tn-3];if(et)et.players.push(pid);}
+  });render();
+}
+function removeP(pid,tn){
+  mutate(()=>{
+    if(tn===1) state.team1.players=state.team1.players.filter(id=>id!==pid);
+    else if(tn===2) state.team2.players=state.team2.players.filter(id=>id!==pid);
+    else{const et=(state.extraTeams||[])[tn-3];if(et)et.players=et.players.filter(id=>id!==pid);}
+  });render();
+}
 
 /* \u2550\u2550\u2550 BETTING \u2550\u2550\u2550 */
 
@@ -1777,6 +1902,48 @@ function savePools(){
   modal=null;render();
 }
 
+function calcSettlement(parts,getCount,amountPerWin){
+  // Each person pays equally into the pot, winners get paid per win
+  // Net = (wins * amountPerWin) - (totalPot / numParticipants)
+  const counts={};parts.forEach(pid=>counts[pid]=getCount(pid));
+  const totalWinnings=parts.reduce((s,pid)=>s+counts[pid]*amountPerWin,0);
+  const shareEach=parts.length?totalWinnings/parts.length:0;
+  return parts.map(pid=>{
+    const p=state.players.find(pl=>pl.id===pid);
+    const earned=counts[pid]*amountPerWin;
+    const net=earned-shareEach;
+    return{pid,name:p?p.name.split(' ')[0]:'?',count:counts[pid],earned,shareEach,net};
+  }).sort((a,b)=>b.net-a.net);
+}
+
+function settlementSummary(settlements,icon){
+  // Build plain-English "X owes Y $Z" statements
+  const winners=settlements.filter(s=>s.net>0.005);
+  const losers=settlements.filter(s=>s.net<-0.005);
+  if(!winners.length||!losers.length) return'';
+  const rows=[];
+  // Clone arrays to avoid mutation
+  const w=winners.map(s=>({...s})), l=losers.map(s=>({...s,net:-s.net}));
+  let wi=0,li=0;
+  while(wi<w.length&&li<l.length){
+    const amt=Math.min(w[wi].net,l[li].net);
+    if(amt>0.005) rows.push(`<div style="display:flex;align-items:center;gap:6px;padding:7px 12px;border-bottom:1px solid rgba(0,39,76,0.05);">
+      <span style="font-size:13px;color:#B71C1C;font-weight:bold;">${l[li].name}</span>
+      <span style="font-size:12px;color:var(--text-muted);">owes</span>
+      <span style="font-size:13px;color:#1B5E20;font-weight:bold;">${w[wi].name}</span>
+      <span style="font-size:14px;font-weight:bold;color:var(--blue);margin-left:auto;">$${amt.toFixed(0)}</span>
+    </div>`);
+    w[wi].net-=amt; l[li].net-=amt;
+    if(w[wi].net<0.005) wi++;
+    if(l[li].net<0.005) li++;
+  }
+  if(!rows.length) return'';
+  return`<div style="border-top:2px solid rgba(0,39,76,0.08);">
+    <div style="padding:6px 12px 4px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);">Settlement</div>
+    ${rows.join('')}
+  </div>`;
+}
+
 function renderBetting(){
   const pools=getPools();
   const allPids=state.players.map(p=>p.id);
@@ -1804,13 +1971,14 @@ function renderBetting(){
         <div style="font-size:15px;font-weight:bold;color:${winnings>0?'#1B5E20':'var(--text-muted)'};">${winnings>0?'+$'+winnings.toFixed(0):'$0'}</div>
       </div>`;
     }).join('');
-    const total=parts.reduce((s,pid)=>s+playerBirdies(pid)*(pool.amount||0),0);
+    const bSettle=calcSettlement(parts,pid=>playerBirdies(pid),pool.amount||0);
     return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px;">
       <div style="background:var(--blue);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
         <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">🐦</span><span style="font-size:13px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:0.5px;">Birdies or Better</span></div>
         <span style="font-size:12px;color:var(--maize);">$${pool.amount||0}/birdie · ${parts.length} players</span>
       </div>
       ${rows||'<div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center;">No scores yet</div>'}
+      ${settlementSummary(bSettle,'🐦')}
     </div>`;
   }
 
@@ -1836,12 +2004,14 @@ function renderBetting(){
         <div style="font-size:15px;font-weight:bold;color:${winnings>0?'#1B5E20':'var(--text-muted)'};">${winnings>0?'+$'+winnings.toFixed(0):'$0'}</div>
       </div>`;
     }).join('');
+    const sSettle=calcSettlement(parts,pid=>skinCounts[pid]||0,pool.amount||0);
     return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px;">
       <div style="background:var(--blue);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
         <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">🏆</span><span style="font-size:13px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:0.5px;">Skins</span></div>
         <span style="font-size:12px;color:var(--maize);">$${pool.amount||0}/skin · ${parts.length} players</span>
       </div>
       ${rows||'<div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center;">No scores yet</div>'}
+      ${settlementSummary(sSettle,'🏆')}
     </div>`;
   }
 
@@ -1868,6 +2038,7 @@ function renderBetting(){
         <span style="font-size:12px;color:var(--maize);">$${pool.amount||0}/pinnie · ${parts.length} players</span>
       </div>
       ${rows||'<div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center;">No scores yet</div>'}
+      ${settlementSummary(calcSettlement(parts,pid=>playerPinnies(pid),pool.amount||0),'🚩')}
     </div>`;
   }
 
@@ -1894,6 +2065,7 @@ function renderBetting(){
         <span style="font-size:12px;color:var(--maize);">$${pool.amount||0}/CTP · ${parts.length} players</span>
       </div>
       ${rows||'<div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center;">No par 3 scores yet</div>'}
+      ${settlementSummary(calcSettlement(parts,pid=>playerCTPs(pid),pool.amount||0),'⛳')}
     </div>`;
   }
 
@@ -1927,9 +2099,85 @@ function renderBetting(){
   </div>`;
 }
 
-function saveBet(){const desc=document.getElementById('b-desc').value.trim(),bettor=document.getElementById('b-b').value.trim(),against=document.getElementById('b-a').value.trim();if(!desc||!bettor||!against)return;mutate(()=>state.bets.push({id:'b'+Date.now(),type:document.getElementById('b-type').value,description:desc,bettor,against,amount:parseFloat(document.getElementById('b-amt').value)||0,settled:false}));modal=null;render();}
-function settleBet(i){const b=state.bets[i],w=prompt('Who won?\
-"'+b.bettor+'" or "'+b.against+'"');if(w===b.bettor||w===b.against){mutate(()=>{state.bets[i].settled=true;state.bets[i].winner=w;});render();}}
+function openAddBet(){
+  const allPlayers=state.players;
+  const allOptions=[
+    ...allPlayers.map(p=>({id:p.id,label:p.name+' (HCP '+p.handicap+')'})),
+    {id:'t1',label:state.team1.name+' (Team)'},{id:'t2',label:state.team2.name+' (Team)'}
+  ];
+  modal=`<div class="modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid var(--maize);padding-bottom:10px;">
+      <div class="modal-title">New Bet</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="form-group"><label class="form-label">Format</label>
+      <select id="b-type">
+        <option value="match">Match Play (hole by hole)</option>
+        <option value="stroke">Stroke Play (total score)</option>
+        <option value="custom">Side Bet</option>
+      </select></div>
+    <div class="form-group"><label class="form-label">Description</label>
+      <input type="text" id="b-desc" placeholder="e.g. Front 9 Match"></div>
+    <div class="grid-2">
+      <div class="form-group"><label class="form-label">Side 1</label>
+        <select id="b-p1"><option value="">Select...</option>
+          ${allOptions.map(o=>`<option value="${o.id}">${o.label}</option>`).join('')}
+        </select></div>
+      <div class="form-group"><label class="form-label">Side 2</label>
+        <select id="b-p2"><option value="">Select...</option>
+          ${allOptions.map(o=>`<option value="${o.id}">${o.label}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="form-group"><label class="form-label">$ per side</label>
+      <input type="number" id="b-amt" value="20" min="0"></div>
+    <div class="form-group"><label class="form-label">Notes (optional)</label>
+      <input type="text" id="b-notes" placeholder="e.g. 80% handicap allowance"></div>
+    <button class="btn btn-gold w-full" onclick="saveBet()">Add Bet</button>
+  </div>`;
+  render();
+}
+
+function saveBet(){
+  const type=(document.getElementById('b-type')||{}).value||'custom';
+  const desc=((document.getElementById('b-desc')||{}).value||'').trim();
+  const p1id=(document.getElementById('b-p1')||{}).value||'';
+  const p2id=(document.getElementById('b-p2')||{}).value||'';
+  const amt=parseFloat((document.getElementById('b-amt')||{}).value)||0;
+  const notes=((document.getElementById('b-notes')||{}).value||'').trim();
+  if(!p1id||!p2id){alert('Please select both sides.');return;}
+  if(p1id===p2id){alert('Select two different players/teams.');return;}
+  function nameOf(id){if(id==='t1')return state.team1.name;if(id==='t2')return state.team2.name;const p=state.players.find(pl=>pl.id===id);return p?p.name:'?';}
+  const bettor=nameOf(p1id),against=nameOf(p2id);
+  const descFinal=desc||(bettor+' vs '+against);
+  mutate(()=>state.bets.push({id:'b'+Date.now(),type,description:descFinal,bettor,against,bettorId:p1id,againstId:p2id,amount:amt,notes,settled:false}));
+  modal=null;render();
+}
+
+function settleBet(i){
+  const b=state.bets[i];
+  modal=`<div class="modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid var(--maize);padding-bottom:10px;">
+      <div class="modal-title">Settle Bet</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div style="padding:12px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:16px;">
+      <div style="font-size:14px;font-weight:bold;color:var(--blue);margin-bottom:4px;">${b.description}</div>
+      <div style="font-size:12px;color:var(--text-muted);">$${b.amount} per side</div>
+    </div>
+    <div style="font-size:13px;font-weight:bold;color:var(--blue);margin-bottom:10px;">Who won?</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-gold w-full" onclick="confirmSettle(${i},'${b.bettor.replace(/'/g,"\\'")}')">🏆 ${b.bettor}</button>
+      <button class="btn btn-ghost w-full" onclick="confirmSettle(${i},'tie')">🤝 Tie / Push</button>
+      <button class="btn btn-gold w-full" onclick="confirmSettle(${i},'${b.against.replace(/'/g,"\\'")}')">🏆 ${b.against}</button>
+    </div>
+  </div>`;
+  render();
+}
+
+function confirmSettle(i,winner){
+  mutate(()=>{state.bets[i].settled=true;state.bets[i].winner=winner;});
+  modal=null;render();
+}
 
 /* \u2550\u2550\u2550 STATS \u2550\u2550\u2550 */
 function renderStats(){const sb=subTab.stats;return`<div class="section-header"><span class="section-title">Statistics</span></div><div class="pill-tabs"><div class="pill-tab ${sb==='players'?'active':''}" onclick="setSub('stats','players')">Players</div><div class="pill-tab ${sb==='teams'?'active':''}" onclick="setSub('stats','teams')">Teams</div></div>${sb==='players'?renderPlayerStats():renderTeamStats()}`;}
@@ -1979,7 +2227,7 @@ function overlayClick(e){if(e.target.classList.contains('modal-overlay')){modal=
 function closeModal(){modal=null;matchDraft=null;render();}
 function delMatch(i){if(!confirm('Delete this match?'))return;state.matches.splice(i,1);save();pushToCloud();render();}
 function delBet(i){if(confirm('Delete?')){mutate(()=>state.bets.splice(i,1));render();}}
-function delPlayer(id){if(!state.isHost||!confirm('Remove?'))return;mutate(()=>{state.players=state.players.filter(p=>p.id!==id);state.team1.players=(state.team1.players||[]).filter(p=>p!==id);state.team2.players=(state.team2.players||[]).filter(p=>p!==id);});render();}
+function delPlayer(id){if(!state.isHost||!confirm('Remove?'))return;mutate(()=>{state.players=state.players.filter(p=>p.id!==id);state.team1.players=(state.team1.players||[]).filter(p=>p!==id);state.team2.players=(state.team2.players||[]).filter(p=>p!==id);(state.extraTeams||[]).forEach(t=>{t.players=(t.players||[]).filter(p=>p!==id);});});render();}
 function resetApp(){if(!state.isHost){alert('Only the host can reset.');return;}if(!confirm('Reset ALL data?'))return;mutate(()=>{state.matches=[];state.bets=[];state.players=[];state.team1.players=[];state.team2.players=[];});render();}
 
 /* \u2550\u2550\u2550 INIT \u2550\u2550\u2550 */
@@ -2190,9 +2438,9 @@ async function doCSrch(fs){
         const teeNames=maleTees.slice(0,5).map(t=>t.tee_name||'').filter(Boolean).join(' · ');
         const key=_cacheCourse(c);
         return '<div class="course-result-item" data-ckey="'+key+'" data-fs="'+(fs?1:0)+'" onclick="_clickApiCourse(this)" style="cursor:pointer;padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.06);">'
-          +'<div style="font-weight:bold;font-size:14px;color:var(--blue);margin-bottom:3px;">'+c.club_name+'</div>'
+          +'<div style="font-weight:bold;font-size:14px;color:var(--blue);margin-bottom:2px;">'+c.club_name+'</div>'
+          +(loc?'<div style="font-size:12px;color:var(--text-muted);font-family:Arial;margin-bottom:4px;">📍 '+loc+'</div>':'')
           +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-          +(loc?'<span style="font-size:12px;color:var(--text-muted);font-family:Arial;">📍 '+loc+'</span>':'')
           +(par?'<span style="font-size:12px;font-weight:bold;color:var(--blue);font-family:Arial;background:rgba(0,39,76,0.07);padding:1px 7px;border-radius:10px;">Par '+par+'</span>':'')
           +(teeNames?'<span style="font-size:11px;color:var(--text-dim);font-family:Arial;">'+teeNames+'</span>':'')
           +'</div>'
@@ -2222,11 +2470,9 @@ function renderBuiltinList(fs,q){
       const key=_cacheCourse(c);
       return '<div class="course-result-item" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.06);">'
         +'<div style="flex:1;cursor:pointer;" data-ckey="'+key+'" data-fs="'+(fs?1:0)+'" onclick="_clickBuiltinCourse(this)">'
-          +'<div style="font-weight:bold;font-size:14px;color:var(--blue);margin-bottom:3px;">'+c.name+(isSaved?' <span style="font-size:9px;padding:1px 5px;background:rgba(0,39,76,0.1);color:var(--blue);border-radius:10px;">Saved</span>':'')+'</div>'
-          +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-          +(c.location?'<span style="font-size:12px;color:var(--text-muted);font-family:Arial;">📍 '+c.location+'</span>':'')
-          +(c.total_par?'<span style="font-size:12px;font-weight:bold;color:var(--blue);font-family:Arial;background:rgba(0,39,76,0.07);padding:1px 7px;border-radius:10px;">Par '+c.total_par+'</span>':'')
-          +'</div>'
+          +'<div style="font-weight:bold;font-size:14px;color:var(--blue);margin-bottom:2px;">'+c.name+(isSaved?' <span style="font-size:9px;padding:1px 5px;background:rgba(0,39,76,0.1);color:var(--blue);border-radius:10px;">Saved</span>':'')+'</div>'
+          +(c.location?'<div style="font-size:12px;color:var(--text-muted);font-family:Arial;margin-bottom:4px;">📍 '+c.location+'</div>':'')
+          +(c.total_par?'<div><span style="font-size:12px;font-weight:bold;color:var(--blue);font-family:Arial;background:rgba(0,39,76,0.07);padding:1px 7px;border-radius:10px;">Par '+c.total_par+'</span></div>':'')
         +'</div>'
         +(isSaved?'<div style="display:flex;gap:4px;">'
           +'<button class="btn btn-sm btn-ghost" style="font-size:10px;" onclick="editSavedCourse('+idx+','+(fs?1:0)+')">Edit</button>'
@@ -2252,10 +2498,16 @@ async function applyApiCourse(keyOrJson,fs){
     const rawTees=c.tees||{};
     const maleTees=Array.isArray(rawTees)?rawTees:(rawTees.male||[]);
     const femaleTees=Array.isArray(rawTees)?[]:(rawTees.female||[]);
-    const allTees=[...maleTees,...femaleTees];
+    // Deduplicate: prefer male tees, add female only if name not already present
+    const seenNames=new Set();
+    const allTees=[...maleTees,...femaleTees].filter(t=>{
+      const name=(t.tee_name||t.name||'').trim();
+      if(!name||seenNames.has(name.toLowerCase())) return false;
+      seenNames.add(name.toLowerCase());
+      return true;
+    });
 
     if(!allTees.length){
-      // No tee data — use basic course info from search result
       throw new Error('No tee data');
     }
 
@@ -2283,12 +2535,16 @@ async function applyApiCourse(keyOrJson,fs){
     const total_par=refTee.par_total||holes.reduce((s,h)=>s+h.par,0)||72;
 
     // Build rating/slope per tee for display
-    const teeInfo=allTees.map(t=>({
-      name:t.tee_name||t.name||'',
-      rating:t.course_rating||0,
-      slope:t.slope_rating||0,
-      total_yards:t.total_yards||0
-    }));
+    const teeInfo=allTees.map((t,ti)=>{
+      // Calculate total yards from holes if not provided at tee level
+      const calcYards=holes.reduce((s,h)=>s+(h.tees&&h.tees[ti]?h.tees[ti]:0),0);
+      return{
+        name:t.tee_name||t.name||'',
+        rating:t.course_rating||0,
+        slope:t.slope_rating||0,
+        total_yards:t.total_yards||calcYards||0
+      };
+    });
 
     const course={
       name:c.club_name||raw.club_name,
