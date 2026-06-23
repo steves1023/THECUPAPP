@@ -1080,8 +1080,9 @@ function renderGroupCard(parent,pi,children){
         hdrH+=`<th style="background:var(--blue);color:#fff;padding:4px 3px;font-size:11px;font-weight:bold;min-width:30px;">${h}</th>`;
         hdrPar+=`<th style="background:var(--blue);color:rgba(255,255,255,0.5);padding:2px 2px;font-size:9px;">${par}</th>`;
       });
-      hdrH+=`<th style="background:var(--blue);color:var(--maize);padding:4px 4px;font-size:9px;">TOT</th>`;
-      hdrPar+=`<th style="background:var(--blue);"></th>`;
+      hdrH+=`<th style="background:var(--blue);color:var(--maize);padding:4px 4px;font-size:9px;">G</th>`;
+      hdrH+=`<th style="background:var(--blue);color:rgba(255,203,5,0.7);padding:4px 4px;font-size:9px;">N</th>`;
+      hdrPar+=`<th style="background:var(--blue);"></th><th style="background:var(--blue);"></th>`;
 
       const playerRowsHTML=cPlayers.map((p,pi)=>{
         const tc=cSides[p.id]==='2'?state.team2.color:state.team1.color;
@@ -1089,20 +1090,43 @@ function renderGroupCard(parent,pi,children){
           <div style="display:flex;align-items:center;gap:4px;">
             <span style="width:8px;height:8px;border-radius:50%;background:${tc};display:inline-block;flex-shrink:0;"></span>
             <span style="font-size:11px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
-            <span style="font-size:9px;color:var(--text-muted);">HCP${p.handicap}${diffs[pi]>0?'+'+diffs[pi]:''}</span>
+            <span style="font-size:9px;color:var(--text-muted);">HCP${p.handicap}${diffs[pi]>0?' +'+diffs[pi]:''}</span>
           </div>
         </td>`;
-        hdList.forEach(({h,par,raws,outright,winnerPis})=>{
+        hdList.forEach(({h,par,raws,nets,outright,winnerPis})=>{
           const raw=raws[pi];
+          const net=nets[pi];
+          const st=strokesOn(diffs[pi],holeSI(cm,h),cm.totalHoles);
           const isWinner=outright&&winnerPis[0]===pi&&raw!=null;
-          const scoreCls=raw==null?'':raw<par?'score-birdie':raw>par+1?'score-double':raw>par?'score-bogey':'';
-          const winStyle=isWinner?'background:#e8f5e9;font-weight:bold;':'';
-          row+=`<td style="padding:2px;border:1px solid rgba(0,39,76,0.06);${winStyle}text-align:center;">
-            <div style="font-size:12px;font-weight:${isWinner?'bold':'500'};color:${isWinner?'#1B5E20':'var(--blue)'};" class="${scoreCls}">${raw!=null?raw:'—'}</div>
+          // Stroke indicator: yellow dot above if player gets a stroke
+          const strokeDot=st>0?`<div style="width:6px;height:6px;border-radius:50%;background:var(--maize);margin:0 auto 1px;border:1px solid rgba(0,39,76,0.2);"></div>`:'<div style="height:7px;"></div>';
+          const diff2=raw!=null?raw-par:null;
+          // Score shape styling
+          let scoreHtml='—';
+          if(raw!=null){
+            const d=raw-par;
+            if(d<=-2) scoreHtml=`<div style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1.5px solid #1B5E20;"><div style="display:flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;border:1.5px solid #1B5E20;background:#e8f5e9;"><span style="font-size:9px;font-weight:bold;color:#1B5E20;">${raw}</span></div></div>`;
+            else if(d===-1) scoreHtml=`<div style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1.5px solid #2E7D32;background:#e8f5e9;"><span style="font-size:10px;font-weight:bold;color:#1B5E20;">${raw}</span></div>`;
+            else if(d===0) scoreHtml=`<span style="font-size:12px;font-weight:bold;color:var(--blue);">${raw}</span>`;
+            else if(d===1) scoreHtml=`<div style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:3px;border:1.5px solid #C0392B;"><span style="font-size:10px;font-weight:bold;color:#C0392B;">${raw}</span></div>`;
+            else scoreHtml=`<div style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:4px;border:1.5px solid #C0392B;"><div style="display:flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:2px;border:1.5px solid #8B0000;background:#fdecea;"><span style="font-size:9px;font-weight:bold;color:#8B0000;">${raw}</span></div></div>`;
+          }
+          row+=`<td style="padding:1px 2px;border:1px solid rgba(0,39,76,0.06);${isWinner?'background:rgba(46,125,50,0.06);':''}text-align:center;vertical-align:middle;">
+            ${strokeDot}
+            ${scoreHtml}
           </td>`;
         });
-        // Total
-        row+=`<td style="padding:3px 4px;background:rgba(0,39,76,0.04);text-align:center;border-left:1px solid rgba(0,39,76,0.1);font-size:12px;font-weight:bold;color:var(--blue);">${totals[pi].any?totals[pi].t:'—'}</td>`;
+        // Gross + Net totals
+        const grossTot=totals[pi].any?totals[pi].t:'—';
+        const netTot=totals[pi].any?cPlayers.reduce((_,__,pii)=>{
+          let nt=0;
+          hdList.forEach(({h,raws})=>{if(raws[pii]!=null)nt+=raws[pii]-strokesOn(diffs[pii],holeSI(cm,h),cm.totalHoles);});return nt;
+        },0)-(function(){let n=0;hdList.forEach(({h,raws})=>{if(raws[pi]!=null)n+=raws[pi]-strokesOn(diffs[pi],holeSI(cm,h),cm.totalHoles);});return n;})():'—';
+        // Simpler net total calc
+        let netSum=0,hasNet=false;
+        hdList.forEach(({h,raws})=>{if(raws[pi]!=null){netSum+=raws[pi]-strokesOn(diffs[pi],holeSI(cm,h),cm.totalHoles);hasNet=true;}});
+        row+=`<td style="padding:3px 4px;background:rgba(0,39,76,0.04);text-align:center;border-left:1px solid rgba(0,39,76,0.1);font-size:12px;font-weight:bold;color:var(--blue);">${grossTot}</td>`;
+        row+=`<td style="padding:3px 4px;background:rgba(0,39,76,0.06);text-align:center;font-size:12px;font-weight:bold;color:${hasNet&&netSum<(hdList.reduce((s,{par})=>s+par,0))?'#1B5E20':hasNet&&netSum>(hdList.reduce((s,{par})=>s+par,0))?'#C0392B':'var(--blue)'};">${hasNet?netSum:'—'}</td>`;
         return`<tr>${row}</tr>`;
       }).join('');
 
@@ -1285,7 +1309,7 @@ function openScorecard(mi,startHole){
               <div style="width:32px;height:32px;border-radius:50%;background:${tc};display:flex;align-items:center;justify-content:center;">
                 <span style="font-size:12px;font-weight:bold;color:#fff;">${p.name[0]}</span>
               </div>
-              ${st>0?`<div style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#FFCB05;border:2px solid #fff;display:flex;align-items:center;justify-content:center;"><span style="font-size:9px;font-weight:bold;color:#00274C;">+${st}</span></div>`:''}
+              ${st>0?`<div style="position:absolute;top:-3px;right:-3px;display:flex;gap:2px;">${Array(Math.min(st,2)).fill('<div style="width:10px;height:10px;border-radius:50%;background:#FFCB05;border:2px solid #fff;"></div>').join('')}</div>`:''}
             </div>
             <div style="flex:1;">
               <div style="display:flex;align-items:center;gap:6px;">
@@ -1354,7 +1378,7 @@ function openScorecard(mi,startHole){
               <div style="width:32px;height:32px;border-radius:50%;background:${t.color};display:flex;align-items:center;justify-content:center;">
                 <span style="font-size:11px;font-weight:bold;color:#fff;">${t.label.split('/')[0].trim()[0]}</span>
               </div>
-              ${gets?`<div style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#FFCB05;border:2px solid #fff;display:flex;align-items:center;justify-content:center;"><span style="font-size:9px;font-weight:bold;color:#00274C;">+1</span></div>`:''}
+              ${gets?`<div style="position:absolute;top:-3px;right:-3px;width:10px;height:10px;border-radius:50%;background:#FFCB05;border:2px solid #fff;"></div>`:''}
             </div>
             <div style="flex:1;">
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
