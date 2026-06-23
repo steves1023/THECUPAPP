@@ -1459,13 +1459,16 @@ function renderMatchModal(){
     ${teeSel}
     <div class="form-group">
       <label class="form-label">Match Type</label>
-      <div style="display:flex;gap:8px;">
-        <div onclick="draftSet('matchType','teams')" style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid ${!isInd?'var(--blue)':'var(--border)'};background:${!isInd?'rgba(0,39,76,0.08)':'#fff'};cursor:pointer;text-align:center;font-size:12px;font-weight:bold;color:${!isInd?'var(--blue)':'var(--text-muted)'};">
-          🏆 Team Match
+      <div style="display:flex;gap:8px;margin-bottom:6px;">
+        <div onclick="draftSet('matchType','teams')" style="flex:1;padding:10px 8px;border-radius:var(--radius);border:2px solid ${!isInd?'var(--blue)':'var(--border)'};background:${!isInd?'rgba(0,39,76,0.08)':'#fff'};cursor:pointer;text-align:center;">
+          <div style="font-size:13px;font-weight:bold;color:${!isInd?'var(--blue)':'var(--text-muted)'};">🏆 Team</div>
         </div>
-        <div onclick="draftSet('matchType','individual')" style="flex:1;padding:8px;border-radius:var(--radius);border:2px solid ${isInd?'var(--blue)':'var(--border)'};background:${isInd?'rgba(0,39,76,0.08)':'#fff'};cursor:pointer;text-align:center;font-size:12px;font-weight:bold;color:${isInd?'var(--blue)':'var(--text-muted)'};">
-          👤 Individual
+        <div onclick="draftSet('matchType','individual')" style="flex:1;padding:10px 8px;border-radius:var(--radius);border:2px solid ${isInd?'var(--blue)':'var(--border)'};background:${isInd?'rgba(0,39,76,0.08)':'#fff'};cursor:pointer;text-align:center;">
+          <div style="font-size:13px;font-weight:bold;color:${isInd?'var(--blue)':'var(--text-muted)'};">👤 Individual</div>
         </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);font-family:Arial;padding:6px 8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);">
+        ${!isInd?'Players compete as two sides — one score per team per hole (or lowest ball for Four-Ball).':'Each player tracks their own score. Assign players to sides for match play result.'}
       </div>
     </div>
     ${!isInd?`
