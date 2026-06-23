@@ -869,22 +869,33 @@ function updSessionScore(si,h,gi,v,par){
 
 function renderScoreboard(){
   const t1=teamPts(1),t2=teamPts(2),tot=t1+t2,need=tot>0?(tot/2+0.5).toFixed(1):'\u2014';
-  return`<div style="padding:12px 16px;background:rgba(0,0,0,0.2);border-bottom:1px solid var(--border);">
-    <div style="display:flex;background:var(--surface);border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border);">
-      <div style="flex:1;padding:14px 16px;text-align:center;background:rgba(193,18,31,0.12);">
-        <div style="font-size:11px;color:${state.team1.color};text-transform:uppercase;letter-spacing:1px;font-family:Arial;margin-bottom:4px;">${state.team1.name}</div>
-        <div style="font-size:42px;font-weight:bold;line-height:1;">${t1}</div>
-        <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">points</div>
+  return`<div style="padding:12px;">
+    <div style="display:flex;gap:8px;align-items:stretch;">
+      <!-- Team 1 -->
+      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${state.team1.color};background:#fff;">
+        <div style="background:${state.team1.color};padding:6px 10px;text-align:center;">
+          <div style="font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:Arial;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${state.team1.name}</div>
+        </div>
+        <div style="padding:10px;text-align:center;">
+          <div style="font-size:44px;font-weight:bold;line-height:1;color:var(--blue);">${t1}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">points</div>
+        </div>
       </div>
-      <div style="padding:14px 12px;text-align:center;min-width:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-left:1px solid var(--border);border-right:1px solid var(--border);">
-        <div style="font-size:10px;color:rgba(255,255,255,0.6);font-family:Arial;">NEED</div>
-        <div style="font-size:16px;font-weight:bold;color:var(--maize-dark);">${need}</div>
-        <div style="font-size:10px;color:rgba(255,255,255,0.6);font-family:Arial;">to win</div>
+      <!-- Middle -->
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:64px;">
+        <div style="font-size:10px;color:var(--text-dim);font-family:Arial;text-transform:uppercase;letter-spacing:0.5px;">Need</div>
+        <div style="font-size:18px;font-weight:bold;color:var(--blue);">${need}</div>
+        <div style="font-size:10px;color:var(--text-dim);font-family:Arial;">to win</div>
       </div>
-      <div style="flex:1;padding:14px 16px;text-align:center;background:rgba(29,52,97,0.2);">
-        <div style="font-size:11px;color:#4fc3f7;text-transform:uppercase;letter-spacing:1px;font-family:Arial;margin-bottom:4px;">${state.team2.name}</div>
-        <div style="font-size:42px;font-weight:bold;line-height:1;">${t2}</div>
-        <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">points</div>
+      <!-- Team 2 -->
+      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${state.team2.color};background:#fff;">
+        <div style="background:${state.team2.color};padding:6px 10px;text-align:center;">
+          <div style="font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:Arial;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${state.team2.name}</div>
+        </div>
+        <div style="padding:10px;text-align:center;">
+          <div style="font-size:44px;font-weight:bold;line-height:1;color:var(--blue);">${t2}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">points</div>
+        </div>
       </div>
     </div>
   </div>
@@ -955,20 +966,20 @@ function renderMatchCard(m,i){
         })():`
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team1.color};"></div>
-          <div class="player-name-label" style="color:var(--blue);">${t1l}</div>
+          <div class="player-name-label" style="color:var(--blue);font-weight:${res.winner==='team1'?'bold':'normal'};">${t1l}</div>
           <div class="player-hdcp-tag">HCP ${avgHT(m.team1Players)}</div>
           <div class="player-score-num" style="color:var(--blue);">${played>0?t1t:'\u2014'}</div>
         </div>
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team2.color};"></div>
-          <div class="player-name-label" style="color:var(--blue);">${t2l}</div>
+          <div class="player-name-label" style="color:var(--blue);font-weight:${res.winner==='team2'?'bold':'normal'};">${t2l}</div>
           <div class="player-hdcp-tag">HCP ${avgHT(m.team2Players)}</div>
           <div class="player-score-num" style="color:var(--blue);">${played>0?t2t:'\u2014'}</div>
         </div>`}
       </div>
       <div class="match-status-col">
-        <div class="status-bubble ${sc}">${res.status}</div>
-        ${res.winner!==null?`<div style="font-size:10px;color:var(--maize-dark);font-family:Arial;">${res.points} pt${res.points!==1?'s':''}</div>`:`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;">${m.totalHoles-played} left</div>`}
+        <div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${res.winner==='team1'?state.team1.color:res.winner==='team2'?state.team2.color:'var(--blue)'};">${played?res.status:'—'}</div>
+        <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:4px;">${res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left'}</div>
       </div>
     </div>
     <div class="hole-progress">${dots}</div>
@@ -1176,8 +1187,8 @@ function renderGroupCard(parent,pi,children){
         </div>
       </div>
       <div class="match-status-col">
-        <div class="status-bubble ${pSc}">${pRes.status}</div>
-        ${pRes.winner!==null?`<div style="font-size:10px;color:var(--maize-dark);font-family:Arial;">${pRes.points} pt${pRes.points!==1?'s':''}</div>`:`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;">${parent.totalHoles-pPlayed} left</div>`}
+        <div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${pRes.winner==='team1'?state.team1.color:pRes.winner==='team2'?state.team2.color:'var(--blue)'};">${pPlayed?pRes.status:'—'}</div>
+        <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:4px;">${pRes.winner!==null?pRes.points+' pt'+(pRes.points!==1?'s':''):parent.totalHoles-pPlayed+' left'}</div>
       </div>
     </div>
     <div class="hole-progress">${pDots}</div>
