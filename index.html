@@ -1310,6 +1310,22 @@ function toggleCtpHole(mi,h,pid,add){
   openScorecard(mi,h);
 }
 
+function dedupTees(cd){
+  // Returns {tees, teeInfo, indexMap} with duplicates removed
+  // indexMap[originalIdx] = dedupedIdx for remapping selectedTee/playerTees
+  if(!cd||!cd.tees||!cd.tees.length) return{tees:[],teeInfo:[],indexMap:{}};
+  const seen=new Set(), tees=[], teeInfo=[], indexMap={};
+  cd.tees.forEach((name,i)=>{
+    const key=(name||'').trim().toLowerCase();
+    if(!key||seen.has(key)){indexMap[i]=tees.findIndex((_,j)=>(cd.tees[j]||'').trim().toLowerCase()===key)||0;return;}
+    seen.add(key);
+    indexMap[i]=tees.length;
+    tees.push(name);
+    if(cd.teeInfo&&cd.teeInfo[i]) teeInfo.push(cd.teeInfo[i]);
+    else teeInfo.push({name,rating:0,slope:0,total_yards:0});
+  });
+  return{tees,teeInfo,indexMap};
+}
 function getTeeName(m){const cd=m.courseData||state.settings.courseData;if(!cd||!cd.tees)return'';return cd.tees[m.selectedTee||0]||'';}
 function getHoleYards(m,h,pid){
   const cd=m.courseData||state.settings.courseData;
@@ -1361,15 +1377,14 @@ function renderMatchModal(){
   // Per-player tee selector — build list of all players in this match
   const matchPids=isInd?[...(d.indPlayers||[])]:[...(d.team1Players||[]),...(d.team2Players||[])];
   const matchPlayers=matchPids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
-  const teeSel=cd&&cd.tees&&cd.tees.length>0?(()=>{
-    if(cd.tees.length===1) return`<div class="form-group"><label class="form-label">Tee</label><div style="font-size:13px;color:var(--blue);padding:4px 0;font-weight:bold;">${cd.tees[0]}</div></div>`;
+  const {tees:dtees,teeInfo:dteeInfo}=dedupTees(cd);
+  const teeSel=dtees.length>0?(()=>{
+    if(dtees.length===1) return`<div class="form-group"><label class="form-label">Tee</label><div style="font-size:13px;color:var(--blue);padding:4px 0;font-weight:bold;">${dtees[0]}</div></div>`;
     const players=matchPlayers.length>0?matchPlayers:[];
-    if(!players.length) return`<div class="form-group"><label class="form-label">Default Tee</label><div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;">${cd.tees.map((t,i)=>{const sel=(d.selectedTee||0)===i;const tInfo=d.teeInfo&&d.teeInfo[i];const yds=tInfo&&tInfo.total_yards?tInfo.total_yards:(cd.holes?cd.holes.reduce((s,h)=>s+(h.tees&&h.tees[i]?h.tees[i]:0),0):0);return`<div onclick="draftSet('selectedTee',${i})" style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:2px solid ${sel?'var(--blue)':'rgba(0,39,76,0.15)'};background:${sel?'var(--blue)':'#fff'};cursor:pointer;text-align:center;min-width:64px;"><div style="font-size:13px;font-weight:bold;color:${sel?'#fff':'var(--blue)'};">${t}</div><div style="font-size:10px;color:${sel?'rgba(255,255,255,0.8)':'var(--text-muted)'};">${yds?yds+'y':'—'}</div></div>`;}).join('')}</div></div>`;
+    if(!players.length) return`<div class="form-group"><label class="form-label">Default Tee</label><div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;">${dtees.map((t,i)=>{const sel=(d.selectedTee||0)===i;const tInfo=dteeInfo[i];const yds=tInfo&&tInfo.total_yards?tInfo.total_yards:(cd&&cd.holes?cd.holes.reduce((s,h)=>s+(h.tees&&h.tees[i]?h.tees[i]:0),0):0);return`<div onclick="draftSet('selectedTee',${i})" style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:2px solid ${sel?'var(--blue)':'rgba(0,39,76,0.15)'};background:${sel?'var(--blue)':'#fff'};cursor:pointer;text-align:center;min-width:64px;"><div style="font-size:13px;font-weight:bold;color:${sel?'#fff':'var(--blue)'};">${t}</div><div style="font-size:10px;color:${sel?'rgba(255,255,255,0.8)':'var(--text-muted)'};">${yds?yds+'y':'—'}</div></div>`;}).join('')}</div></div>`;
     return`<div class="form-group"><label class="form-label">Tees</label><div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">${players.map((p,idx)=>{
       const ac=AVC[state.players.findIndex(pl=>pl.id===p.id)%AVC.length];
       const curTee=(d.playerTees||{})[p.id]!=null?(d.playerTees||{})[p.id]:(d.selectedTee||0);
-      const selTee=cd.tees[curTee]||cd.tees[0];
-      const ti=d.teeInfo&&d.teeInfo[curTee];
       return`<div style="display:flex;align-items:center;padding:10px 12px;${idx>0?'border-top:1px solid rgba(0,39,76,0.07)':''};">
         <div style="display:flex;align-items:center;gap:7px;width:90px;flex-shrink:0;">
           <span style="width:9px;height:9px;border-radius:50%;background:${ac};flex-shrink:0;"></span>
@@ -1379,7 +1394,7 @@ function renderMatchModal(){
           </div>
         </div>
         <div style="flex:1;display:flex;gap:5px;overflow-x:auto;padding:2px 0;-webkit-overflow-scrolling:touch;">
-          ${cd.tees.map((t,i)=>{const sel=curTee===i;const tInfo=d.teeInfo&&d.teeInfo[i];const yds=tInfo&&tInfo.total_yards?tInfo.total_yards:(cd.holes?cd.holes.reduce((s,h)=>s+(h.tees&&h.tees[i]?h.tees[i]:0),0):0);return`<div onclick="setPlayerTee('${p.id}',${i})" style="flex-shrink:0;padding:6px 12px;border-radius:20px;border:2px solid ${sel?'var(--blue)':'rgba(0,39,76,0.15)'};background:${sel?'var(--blue)':'#fff'};cursor:pointer;text-align:center;min-width:60px;"><div style="font-size:12px;font-weight:bold;color:${sel?'#fff':'var(--blue)'};">${t}</div><div style="font-size:10px;color:${sel?'rgba(255,255,255,0.8)':'var(--text-muted)'};">${yds?yds+'y':'—'}</div></div>`;}).join('')}
+          ${dtees.map((t,i)=>{const sel=curTee===i;const tInfo=dteeInfo[i];const yds=tInfo&&tInfo.total_yards?tInfo.total_yards:(cd&&cd.holes?cd.holes.reduce((s,h)=>s+(h.tees&&h.tees[i]?h.tees[i]:0),0):0);return`<div onclick="setPlayerTee('${p.id}',${i})" style="flex-shrink:0;padding:6px 12px;border-radius:20px;border:2px solid ${sel?'var(--blue)':'rgba(0,39,76,0.15)'};background:${sel?'var(--blue)':'#fff'};cursor:pointer;text-align:center;min-width:60px;"><div style="font-size:12px;font-weight:bold;color:${sel?'#fff':'var(--blue)'};">${t}</div><div style="font-size:10px;color:${sel?'rgba(255,255,255,0.8)':'var(--text-muted)'};">${yds?yds+'y':'—'}</div></div>`;}).join('')}
         </div>
       </div>`;
     }).join('')}</div></div>`;
