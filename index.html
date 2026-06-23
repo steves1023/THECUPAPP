@@ -778,30 +778,7 @@ function renderScoreboard(){
       </div>
     </div>
   </div>
-  ${state.players.length>0?`
-  <div class="section-header"><span class="section-title">Players</span></div>
-  <div style="padding:8px 12px;">
-    ${state.players.map(p=>{
-      const pinnies=playerPinnies(p.id);
-      const ctps=playerCTPs(p.id);
-      const ac=AVC[state.players.indexOf(p)%AVC.length];
-      const team=state.team1.players.includes(p.id)?state.team1:state.team2.players.includes(p.id)?state.team2:null;
-      const init=p.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
-      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff;border:1px solid rgba(0,39,76,0.08);border-radius:var(--radius);margin-bottom:8px;">
-        <div style="width:36px;height:36px;border-radius:50%;background:${team?team.color:ac};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <span style="font-size:13px;font-weight:bold;color:#fff;">${init}</span>
-        </div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
-          <div style="font-size:11px;color:var(--text-muted);">${team?team.name+' · ':''}HCP ${p.handicap}</div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          ${pinnies>0?`<div style="text-align:center;"><div style="font-size:18px;line-height:1;">🚩</div><div style="font-size:13px;font-weight:bold;color:var(--blue);">${pinnies}</div></div>`:'<div style="text-align:center;opacity:0.25;"><div style="font-size:18px;line-height:1;">🚩</div><div style="font-size:13px;font-weight:bold;color:var(--text-dim);">0</div></div>'}
-          ${ctps>0?`<div style="text-align:center;"><div style="font-size:18px;line-height:1;">⛳</div><div style="font-size:13px;font-weight:bold;color:var(--blue);">${ctps}</div></div>`:'<div style="text-align:center;opacity:0.25;"><div style="font-size:18px;line-height:1;">⛳</div><div style="font-size:13px;font-weight:bold;color:var(--text-dim);">0</div></div>'}
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`:''}
+
   <div class="section-header"><span class="section-title">Live Matches</span>${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button>`:''}</div>
   ${state.matches.length===0?`<div class="empty-state">No matches yet.${state.isHost?' Tap + Match to begin.':''}</div>`:''}
   ${renderGroupedMatches()}`;
