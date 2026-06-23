@@ -8,7 +8,6 @@
 <meta name="theme-color" content="#0a1628">
 <title>The Cup</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 :root{
   --maize:#FFCB05;--maize-dark:#E5B800;--maize-light:#FFD740;
   --blue:#00274C;--blue-mid:#003D7A;--blue-light:#1A4F8A;
@@ -17,126 +16,124 @@
   --bg:#FFFFFF;--surface:#FFFFFF;--surface2:#F7F8FA;--surface3:#ECEEF2;
   --border:rgba(0,39,76,0.12);
   --text:#00274C;--text-muted:#3A5070;--text-dim:#6B82A0;
-  --radius:10px;--radius-lg:16px;
+  --radius:10px;--radius-lg:14px;
 }
-body{font-family:'Georgia',serif;background:#fff;color:var(--text);min-height:100vh;overscroll-behavior:none;}
-.app{max-width:600px;margin:0 auto;padding:0 0 90px;}
-.topbar{background:#fff;border-bottom:3px solid var(--maize);box-shadow:0 2px 8px rgba(0,39,76,0.12);position:sticky;top:0;z-index:100;}
-.topbar-inner{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;}
-.event-name{font-size:14px;font-weight:bold;color:var(--blue);letter-spacing:1px;text-transform:uppercase;cursor:pointer;}
-.nav-tabs{display:flex;gap:2px;overflow-x:auto;padding:0 16px;background:var(--blue);scrollbar-width:none;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:#fff;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+body{color:var(--blue);}
+/* ── APP SHELL ── */
+.app{max-width:480px;margin:0 auto;padding:0 0 100px;}
+/* ── TOPBAR ── */
+.topbar{background:#fff;border-bottom:3px solid var(--maize);box-shadow:0 2px 8px rgba(0,39,76,0.1);position:sticky;top:0;z-index:100;}
+.topbar-inner{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;gap:8px;}
+.event-name{font-size:13px;font-weight:bold;color:var(--blue);letter-spacing:0.5px;text-transform:uppercase;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* ── NAV ── */
+.nav-tabs{display:flex;overflow-x:auto;padding:0;background:var(--blue);scrollbar-width:none;-webkit-overflow-scrolling:touch;}
 .nav-tabs::-webkit-scrollbar{display:none;}
-.nav-tab{padding:8px 14px;font-size:12px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;color:rgba(255,255,255,0.75);letter-spacing:0.5px;font-family:Arial,sans-serif;}
-.nav-tab.active{color:var(--maize);border-bottom-color:var(--maize);}
-.card{background:#fff;border:1px solid rgba(0,39,76,0.1);box-shadow:0 1px 4px rgba(0,39,76,0.06);border-radius:var(--radius-lg);padding:16px;margin:8px 16px;}
+.nav-tab{padding:11px 16px;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;color:rgba(255,255,255,0.7);letter-spacing:0.3px;font-family:Arial,sans-serif;flex-shrink:0;}
+.nav-tab.active{color:var(--maize);border-bottom-color:var(--maize);font-weight:bold;}
+/* ── CARDS ── */
+.card{background:#fff;border:1px solid var(--border);box-shadow:0 1px 4px rgba(0,39,76,0.06);border-radius:var(--radius-lg);padding:14px;margin:8px 12px;}
 .card-title{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--blue);margin-bottom:12px;font-family:Arial,sans-serif;font-weight:bold;}
-.match-card{background:rgba(0,39,76,0.04);border-radius:var(--radius-lg);margin:0 16px 10px;border:1px solid var(--border);overflow:hidden;}
-.match-card-header{padding:10px 12px 8px;border-bottom:2px solid var(--maize);display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--blue);}
-.match-format-badge{font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,0.15);color:#fff;letter-spacing:0.5px;font-family:Arial,sans-serif;flex-shrink:0;}
+/* ── MATCH CARDS ── */
+.match-card{background:#fff;border-radius:var(--radius-lg);margin:0 12px 10px;border:1px solid var(--border);overflow:hidden;box-shadow:0 1px 4px rgba(0,39,76,0.06);}
+.match-card-header{padding:10px 12px;border-bottom:2px solid var(--maize);display:flex;align-items:center;justify-content:space-between;gap:6px;background:var(--blue);}
+.match-format-badge{font-size:10px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,0.15);color:#fff;font-family:Arial,sans-serif;flex-shrink:0;white-space:nowrap;}
 .match-body{display:flex;align-items:stretch;}
 .match-players-col{flex:1;padding:10px 12px;min-width:0;}
 .match-player-row{display:flex;align-items:center;gap:8px;padding:5px 0;}
 .match-player-row:first-child{border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:2px;}
 .match-player-row:last-child{padding-top:6px;}
-.player-color-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-.player-score-num{font-size:22px;font-weight:bold;min-width:28px;text-align:right;}
-.player-name-label{font-size:13px;font-weight:bold;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--blue);}
+.player-color-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.player-score-num{font-size:20px;font-weight:bold;min-width:28px;text-align:right;color:var(--blue);}
+.player-name-label{font-size:14px;font-weight:bold;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue);}
 .player-hdcp-tag{font-size:10px;color:var(--text-muted);font-family:Arial,sans-serif;flex-shrink:0;}
-.match-status-col{min-width:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;border-left:1px solid var(--border);gap:4px;}
-.status-bubble{font-size:15px;font-weight:bold;padding:4px 10px;border-radius:20px;white-space:nowrap;font-family:Arial,sans-serif;}
-.status-t1{background:rgba(193,18,31,0.2);color:#ff7b84;}
-.status-t2{background:rgba(29,52,97,0.4);color:var(--blue);}
-.status-as{background:rgba(212,160,23,0.15);color:var(--maize-dark);}
-.hole-progress{display:flex;gap:2px;padding:6px 12px 8px;flex-wrap:wrap;}
-.hp-dot{width:14px;height:14px;border-radius:3px;}
+.match-status-col{min-width:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 8px;border-left:1px solid var(--border);gap:4px;text-align:center;}
+/* ── STATUS BUBBLES ── */
+.status-bubble{font-size:13px;font-weight:bold;padding:4px 10px;border-radius:20px;white-space:nowrap;font-family:Arial,sans-serif;}
+.status-t1{background:rgba(0,39,76,0.12);color:var(--blue);}
+.status-t2{background:rgba(255,203,5,0.25);color:#5A4200;}
+.status-as{background:rgba(0,39,76,0.06);color:var(--blue);}
+/* ── HOLE PROGRESS ── */
+.hole-progress{display:flex;gap:3px;padding:7px 12px 9px;flex-wrap:wrap;}
+.hp-dot{width:12px;height:12px;border-radius:3px;}
 .hp-dot.win1{background:var(--blue);}
 .hp-dot.win2{background:var(--maize);}
-.hp-dot.halve{background:var(--gold);}
-.hp-dot.pending{background:rgba(0,39,76,0.06);}
-.form-group{margin-bottom:12px;}
-.form-label{font-size:11px;color:var(--blue);margin-bottom:4px;display:block;font-family:Arial,sans-serif;letter-spacing:0.5px;font-weight:bold;text-transform:uppercase;}
-input,select,textarea{width:100%;padding:10px 12px;background:#fff;border:1px solid rgba(0,39,76,0.2);border-radius:var(--radius);color:var(--blue);font-size:15px;font-family:Arial,sans-serif;-webkit-appearance:auto;}
-input::placeholder{color:rgba(0,39,76,0.35);}input::placeholder,textarea::placeholder{color:rgba(0,39,76,0.3);}input:focus,select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 2px rgba(0,39,76,0.1);}
-select option{background:var(--surface);}
-.btn{padding:8px 16px;border-radius:var(--radius);font-size:12px;font-family:Arial,sans-serif;cursor:pointer;border:none;font-weight:bold;letter-spacing:0.5px;transition:all 0.15s;}
-.btn-gold{background:var(--maize);color:var(--blue);font-weight:bold;box-shadow:0 2px 6px rgba(255,203,5,0.3);}
-.btn-gold:hover{background:var(--maize-light);}
-.btn-red{background:var(--red);color:#fff;}
-.btn-ghost{background:transparent;color:var(--blue-mid);border:1px solid rgba(0,39,76,0.2);}
-.btn-ghost:hover{background:rgba(0,39,76,0.06);color:var(--text);}
-.btn-sm{padding:5px 10px;font-size:11px;}
-.btn-lg{padding:14px 24px;font-size:15px;border-radius:var(--radius-lg);}
-.player-row{display:flex;align-items:center;padding:8px 12px;background:#fff;border:1px solid rgba(0,39,76,0.08);border-radius:var(--radius);margin-bottom:6px;gap:10px;}
-.player-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;}
-.team-card{background:#fff;border-radius:var(--radius-lg);padding:14px;border:2px solid transparent;}
-.team-card.t1{border-color:rgba(193,18,31,0.4);}
-.team-card.t2{border-color:rgba(29,52,97,0.6);}
-.bet-row{display:flex;align-items:center;padding:10px 12px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:6px;gap:8px;}
-.bet-status{font-size:11px;padding:3px 8px;border-radius:20px;font-family:Arial,sans-serif;}
-.bet-open{background:rgba(52,185,95,0.2);color:#52b788;}
-.bet-won{background:rgba(212,160,23,0.2);color:var(--maize-dark);}
-.bet-lost{background:rgba(193,18,31,0.2);color:#B71C1C;}
-.history-row{display:flex;align-items:center;padding:10px 14px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:6px;justify-content:space-between;cursor:pointer;}
-.history-row:hover{background:rgba(0,39,76,0.06);}
-.stat-bar{background:rgba(0,39,76,0.06);border-radius:4px;height:6px;overflow:hidden;margin-top:4px;}
-.stat-fill{height:100%;border-radius:4px;background:var(--maize);}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
-.modal{background:#fff;border-top:3px solid var(--maize);border-top:3px solid var(--maize);border:1px solid rgba(0,39,76,0.1);border-radius:var(--radius-lg);padding:20px;width:100%;max-width:520px;margin:auto;}
-.modal-title{font-size:16px;font-weight:bold;color:var(--gold);}
-.modal-close{cursor:pointer;color:var(--text-muted);font-size:18px;background:none;border:none;}
-.sc-wrap{overflow-x:auto;}
-.sc-table{border-collapse:collapse;font-size:11px;font-family:Arial,sans-serif;min-width:100%;}
-.sc-table th{background:var(--blue);color:#fff;padding:6px 5px;text-align:center;border:1px solid rgba(255,255,255,0.1);white-space:nowrap;font-family:Arial;font-size:11px;}
-.sc-table td{padding:4px 3px;text-align:center;border:1px solid var(--border);}
-.sc-table tr:nth-child(even) td{background:rgba(255,255,255,0.03);}
-.score-eagle{background:rgba(212,160,23,0.35)!important;font-weight:bold;color:var(--maize-dark)!important;}
-.score-birdie{background:rgba(46,125,50,0.15)!important;color:#1B5E20!important;}
-.score-bogey{background:rgba(198,40,40,0.12)!important;color:#B71C1C!important;}
-.score-double{background:rgba(198,40,40,0.25)!important;color:#B71C1C!important;font-weight:bold;}
-.sc-input{width:38px;padding:3px 2px;text-align:center;font-size:12px;}
-.sc-total-cell{font-weight:bold;background:rgba(0,39,76,0.06)!important;color:var(--blue);}
-.stroke-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--stroke-badge);margin-left:3px;vertical-align:middle;}
-.stroke-dot2{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-left:1px;vertical-align:middle;}
-.player-picker{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
-.player-pick-item{display:flex;align-items:center;padding:7px 10px;gap:8px;cursor:pointer;border-bottom:1px solid var(--border);}
-.player-pick-item:last-child{border-bottom:none;}
-.player-pick-item.selected{background:rgba(212,160,23,0.1);}
-.pick-check{width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;}
-.player-pick-item.selected .pick-check{background:var(--gold);border-color:var(--gold);color:var(--navy);font-weight:bold;}
-.team-section-label{font-size:10px;padding:5px 10px;font-family:Arial,sans-serif;letter-spacing:1px;text-transform:uppercase;background:rgba(0,39,76,0.06);}
-.selected-chip{font-size:11px;padding:3px 8px;border-radius:20px;font-family:Arial,sans-serif;font-weight:bold;}
-.course-result-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-family:Arial,sans-serif;}
-.course-result-item:last-child{border-bottom:none;}
-.course-result-item:hover{background:rgba(0,39,76,0.06);}
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.hp-dot.halve{background:rgba(0,39,76,0.3);}
+.hp-dot.pending{background:rgba(0,39,76,0.08);border:1px solid rgba(0,39,76,0.12);}
+/* ── FORMS ── */
+.form-group{margin-bottom:14px;}
+.form-label{font-size:11px;color:var(--blue);margin-bottom:6px;display:block;font-family:Arial,sans-serif;letter-spacing:0.5px;font-weight:bold;text-transform:uppercase;}
+input,select,textarea{width:100%;padding:12px 14px;background:#fff;border:1.5px solid rgba(0,39,76,0.2);border-radius:var(--radius);color:var(--blue);font-size:16px;font-family:Arial,sans-serif;-webkit-appearance:none;appearance:none;outline:none;}
+input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,39,76,0.1);}
+input::placeholder,textarea::placeholder{color:rgba(0,39,76,0.3);}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2300274C' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;}
+/* ── BUTTONS ── */
+.btn{padding:12px 18px;border-radius:var(--radius);font-size:14px;font-family:Arial,sans-serif;cursor:pointer;border:none;font-weight:bold;letter-spacing:0.3px;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:44px;-webkit-appearance:none;}
+.btn-gold{background:var(--maize);color:var(--blue);box-shadow:0 2px 8px rgba(255,203,5,0.3);}
+.btn-ghost{background:transparent;color:var(--blue-mid);border:1.5px solid rgba(0,39,76,0.2);}
+.btn-sm{padding:7px 12px;font-size:12px;min-height:36px;}
+.btn-lg{padding:16px 24px;font-size:16px;border-radius:var(--radius-lg);}
 .w-full{width:100%;}
-.empty-state{text-align:center;padding:32px;color:var(--text-dim);font-family:Arial,sans-serif;font-size:13px;}
-.badge{font-size:10px;padding:2px 8px;border-radius:20px;font-family:Arial,sans-serif;font-weight:bold;}
-.badge-gold{background:rgba(255,203,5,0.2);color:var(--maize);border:1px solid rgba(255,203,5,0.35);}
-.section-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px;background:var(--blue);}
-.section-title{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--maize);font-family:Arial,sans-serif;}
-.pill-tabs{display:flex;gap:6px;padding:4px 16px 8px;overflow-x:auto;scrollbar-width:none;background:var(--blue);}
-.pill-tab{padding:5px 12px;border-radius:20px;font-size:11px;font-family:Arial,sans-serif;cursor:pointer;border:1px solid rgba(255,255,255,0.3);color:rgba(255,255,255,0.8);white-space:nowrap;}
-.pill-tab.active{background:var(--maize);color:var(--blue);border-color:var(--maize);font-weight:bold;}
-.divider{border:none;border-top:1px solid var(--border);margin:12px 0;}
-.selected-players-display{min-height:28px;display:flex;flex-wrap:wrap;gap:4px;padding:4px 0;}
-.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px;}
+/* ── SECTION HEADERS ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;background:var(--blue);}
+.section-title{font-size:12px;font-weight:bold;color:var(--maize);text-transform:uppercase;letter-spacing:1px;font-family:Arial,sans-serif;}
+/* ── PILL TABS ── */
+.pill-tabs{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;scrollbar-width:none;background:var(--blue);-webkit-overflow-scrolling:touch;}
+.pill-tabs::-webkit-scrollbar{display:none;}
+.pill-tab{padding:7px 14px;border-radius:20px;font-size:12px;font-family:Arial,sans-serif;cursor:pointer;color:rgba(255,255,255,0.75);border:1.5px solid rgba(255,255,255,0.25);white-space:nowrap;flex-shrink:0;min-height:36px;}
+.pill-tab.active{background:var(--maize);color:var(--blue);font-weight:bold;border-color:var(--maize);}
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;display:flex;align-items:flex-end;justify-content:center;padding:0;}
+.modal{background:#fff;border-top:3px solid var(--maize);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:20px 16px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.modal-title{font-size:18px;font-weight:bold;color:var(--blue);font-family:Arial,sans-serif;}
+.modal-close{background:rgba(0,39,76,0.08);border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;color:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+/* ── PLAYER ROWS ── */
+.player-row{display:flex;align-items:center;padding:10px 12px;background:#fff;border:1px solid rgba(0,39,76,0.08);border-radius:var(--radius);margin-bottom:8px;gap:10px;}
+.player-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:bold;flex-shrink:0;}
+.player-pick-item{display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);margin-bottom:6px;cursor:pointer;}
+.player-pick-item.selected{border-color:var(--blue);background:rgba(0,39,76,0.04);}
+.pick-check{width:22px;height:22px;border-radius:50%;border:2px solid rgba(0,39,76,0.2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;flex-shrink:0;color:var(--blue);}
+.player-pick-item.selected .pick-check{background:var(--blue);color:#fff;border-color:var(--blue);}
+/* ── SCORECARD ── */
+.sc-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;}
+.sc-input{width:42px;padding:5px 2px;text-align:center;font-size:15px;font-weight:bold;background:#fff;border:1.5px solid rgba(0,39,76,0.15);border-radius:6px;color:var(--blue);-webkit-appearance:none;}
+.sc-input:focus{border-color:var(--blue);outline:none;}
+.score-birdie{background:rgba(46,125,50,0.15)!important;color:#1B5E20!important;}
+.score-bogey{background:rgba(193,18,31,0.1)!important;color:#B71C1C!important;}
+.score-double{background:rgba(193,18,31,0.2)!important;color:#8B0000!important;}
+/* ── BADGES ── */
+.badge{font-size:10px;padding:3px 8px;border-radius:20px;font-family:Arial,sans-serif;}
+.badge-gold{background:rgba(255,203,5,0.2);color:var(--maize-dark);border:1px solid rgba(255,203,5,0.35);}
+/* ── MISC ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.info-box{background:rgba(0,39,76,0.06);border:1px solid rgba(0,39,76,0.15);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;color:var(--blue);font-family:Arial;font-size:13px;}
+.empty-state{text-align:center;padding:48px 20px;color:var(--text-muted);font-family:Arial,sans-serif;font-size:14px;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,39,76,0.2);border-top-color:var(--blue);border-radius:50%;animation:spin 0.7s linear infinite;margin-right:6px;}
 @keyframes spin{to{transform:rotate(360deg);}}
-.live-dot{width:8px;height:8px;border-radius:50%;background:#52b788;display:inline-block;margin-right:6px;animation:pulse 2s infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.4;}}
-.sync-bar{background:rgba(82,183,136,0.1);border-bottom:1px solid rgba(82,183,136,0.2);padding:6px 16px;font-size:11px;font-family:Arial,sans-serif;color:#52b788;display:flex;align-items:center;justify-content:space-between;}
-.room-code{font-size:28px;font-weight:bold;letter-spacing:6px;color:var(--maize-dark);text-align:center;padding:12px;background:rgba(0,39,76,0.04);border-radius:var(--radius);border:1px solid var(--gold);margin:8px 0;}
-.join-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;background:linear-gradient(180deg,var(--blue) 0%,var(--blue-mid) 50%,#F5F5F5 100%);}
-.join-logo{font-size:48px;margin-bottom:12px;}
-.join-title{font-size:28px;font-weight:bold;color:var(--maize-dark);margin-bottom:6px;font-family:Georgia,serif;}
-.join-sub{font-size:14px;color:var(--text-muted);font-family:Arial,sans-serif;margin-bottom:32px;}
-.code-input{font-size:24px;letter-spacing:8px;text-align:center;text-transform:uppercase;padding:14px;font-weight:bold;}
-.info-box{background:rgba(106,176,224,0.08);border:1px solid rgba(106,176,224,0.2);border-radius:var(--radius);padding:10px 12px;font-size:11px;font-family:Arial,sans-serif;color:var(--text-muted);margin-bottom:12px;}
-.warn-box{background:rgba(212,160,23,0.08);border:1px solid rgba(212,160,23,0.25);border-radius:var(--radius);padding:10px 12px;font-size:11px;font-family:Arial,sans-serif;color:var(--gold);margin-bottom:10px;}
-/* Built-in course list */
-.builtin-course{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:space-between;}
-.builtin-course:last-child{border-bottom:none;}
-.builtin-course:hover{background:rgba(0,39,76,0.06);}
+.selected-chip{display:inline-block;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:bold;margin:2px;}
+.team-section-label{font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;padding:4px 0;margin-top:4px;}
+.bet-row{display:flex;align-items:center;padding:12px;background:rgba(0,39,76,0.03);border-radius:var(--radius);margin-bottom:8px;gap:8px;}
+.bet-status{font-size:11px;padding:3px 8px;border-radius:20px;font-family:Arial,sans-serif;}
+.bet-open{background:rgba(52,185,95,0.2);color:#1b4332;}
+.bet-won{background:rgba(255,203,5,0.2);color:#5A4200;}
+.bet-lost{background:rgba(193,18,31,0.15);color:#B71C1C;}
+.stat-bar{background:rgba(0,39,76,0.06);border-radius:4px;height:8px;overflow:hidden;margin-top:4px;}
+.stat-fill{height:100%;border-radius:4px;background:var(--maize);}
+.code-input{font-size:28px;letter-spacing:8px;text-align:center;text-transform:uppercase;padding:16px;font-weight:bold;}
+.course-result-item:last-child{border-bottom:none!important;}
+/* ── JOIN SCREEN ── */
+.join-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 20px;text-align:center;background:linear-gradient(180deg,var(--blue) 0%,var(--blue-mid) 55%,#fff 100%);}
+/* ── SC TABLE ── */
+.sc-table{border-collapse:collapse;width:100%;}
+.sc-table th{background:var(--blue);color:#fff;padding:6px 4px;text-align:center;border:1px solid rgba(255,255,255,0.08);white-space:nowrap;font-family:Arial;font-size:11px;}
+/* ── HISTORY ── */
+.history-row{display:flex;align-items:center;padding:12px 14px;background:rgba(0,39,76,0.03);border-radius:var(--radius);margin-bottom:8px;justify-content:space-between;cursor:pointer;border:1px solid var(--border);}
+/* ── TEAM CARDS ── */
+.team-card{background:#fff;border-radius:var(--radius-lg);padding:14px;border:2px solid transparent;}
+.team-card.t1{border-color:rgba(0,39,76,0.3);}
+.team-card.t2{border-color:rgba(255,203,5,0.5);}
 </style>
 </head>
 <body>
@@ -674,7 +671,7 @@ function renderGroupCard(parent,pi,children){
         ${cn?`<span style="font-size:10px;color:#52c97a;font-family:Arial;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⛳ ${cn}</span>`:''}
       </div>
       <div style="display:flex;gap:4px;">
-        ${canScoreParent?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${pi})">✏️ Scores</button>`:''}
+        ${canScoreParent?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${pi})" style="font-size:11px;padding:6px 10px;min-height:32px;">✏️</button>`:''}
         ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openMatchModal(${pi})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${pi})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>`:''}
       </div>
     </div>
@@ -711,200 +708,212 @@ function openScorecard(mi){
   const holes=matchHoles(m);
   const front=holes.slice(0,Math.min(9,holes.length));
   const back=m.totalHoles===18?holes.slice(9):[];
-  const teeName=getTeeName(m);
 
   function holeInfo(h){
     const hd2=m.holes[h]||{};
-    const courseHole=cd&&cd.holes&&cd.holes[h-1]?cd.holes[h-1]:null;
-    const par=courseHole?courseHole.par:4;
-    const si=courseHole?courseHole.handicap:h;
-    const yds=getHoleYards(m,h);
-    return{hd2,par,si,yds,courseHole};
+    const ch=cd&&cd.holes&&cd.holes[h-1]?cd.holes[h-1]:null;
+    return{hd2, par:ch?ch.par:4, si:ch?ch.handicap:h};
   }
 
-  /* ── TEAM horizontal block ── */
+  // ── TEAM BLOCK ──────────────────────────────────────────────────────────────
   function teamBlock(holeList,label){
     if(!holeList.length) return '';
-    const t1l=mLabel(m,1).split('/')[0].trim();
-    const t2l=mLabel(m,2).split('/')[0].trim();
-    const hd=hDiff(m); // negative = team1 gets strokes, positive = team2 gets strokes
-    const receivingTeam=hd<0?1:hd>0?2:0;
-    const absHd=Math.abs(hd);
-    // Get representative player from each side for yardage
-    const t1rep=(m.team1Players||[])[0], t2rep=(m.team2Players||[])[0];
-    const t1Tee=getPlayerTeeName(m,t1rep), t2Tee=getPlayerTeeName(m,t2rep);
-    const showT1Yds=!!(t1rep&&cd&&cd.tees), showT2Yds=!!(t2rep&&cd&&cd.tees&&t1Tee!==t2Tee);
-    let hdrH=`<th style="background:var(--blue);color:var(--maize);padding:5px 6px;font-size:11px;font-weight:bold;text-align:left;">${label}</th>`;
-    let hdrPar=`<th style="background:var(--blue);color:rgba(255,255,255,0.5);padding:3px 6px;font-size:10px;font-weight:normal;text-align:left;">Par</th>`;
-    let hdrSI=`<th style="background:var(--blue);color:rgba(255,255,255,0.4);padding:3px 6px;font-size:9px;font-weight:normal;text-align:left;">SI</th>`;
-    let hdrT1Yds=showT1Yds?`<th style="background:var(--blue);color:rgba(255,255,255,0.75);padding:3px 6px;font-size:9px;font-weight:normal;text-align:left;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${state.team1.color};margin-right:3px;vertical-align:middle;"></span>${t1Tee} Yds</th>`:'';
-    let hdrT2Yds=showT2Yds?`<th style="background:var(--blue);color:rgba(255,255,255,0.75);padding:3px 6px;font-size:9px;font-weight:normal;text-align:left;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${state.team2.color};margin-right:3px;vertical-align:middle;"></span>${t2Tee} Yds</th>`:'';
-    let hdrStrk=absHd>0?`<th style="background:var(--blue);color:rgba(255,255,255,0.4);padding:3px 6px;font-size:9px;font-weight:normal;text-align:left;">+Strk</th>`:'';
-    let t1row=`<td style="background:var(--blue);color:#fff;font-weight:bold;padding:5px 6px;font-size:11px;font-family:Arial;white-space:nowrap;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${state.team1.color};margin-right:4px;"></span>${t1l}<br><span style="font-size:9px;color:rgba(255,255,255,0.6);font-weight:normal;">HCP ${avgHT(m.team1Players)}</span></td>`;
-    let t2row=`<td style="background:var(--blue);color:#fff;font-weight:bold;padding:5px 6px;font-size:11px;font-family:Arial;white-space:nowrap;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${state.team2.color};margin-right:4px;"></span>${t2l}<br><span style="font-size:9px;color:rgba(255,255,255,0.6);font-weight:normal;">HCP ${avgHT(m.team2Players)}</span></td>`;
+    const hd=hDiff(m), absHd=Math.abs(hd);
+    const t1name=mLabel(m,1), t2name=mLabel(m,2);
     let t1tot=0,t2tot=0,t1any=false,t2any=false;
-    holeList.forEach(h=>{
+
+    // Hole columns
+    const holeCols=holeList.map(h=>{
       const{hd2,par,si}=holeInfo(h);
-      const st=strokesOn(hd,si,m.totalHoles),absSt=Math.abs(st);
-      // Which team gets the stroke on this hole?
-      const t1gets=st<0&&absSt>0; // hd<0 means team1 is higher hcp = receives
-      const t2gets=st>0&&absSt>0;
-      const strokeColor=t1gets?state.team1.color:t2gets?state.team2.color:'transparent';
-      // Net scores for hole winner
+      const st=strokesOn(hd,si,m.totalHoles);
       const t1v=hd2.t1!=null?hd2.t1:null;
       const t2v=hd2.t2!=null?hd2.t2:null;
-      const t1net=t1v!=null?t1v+st:null; // st<0 helps team1
+      const t1net=t1v!=null?t1v+st:null;
       const t2net=t2v!=null?t2v:null;
       const t1win=t1net!=null&&t2net!=null&&t1net<t2net;
       const t2win=t1net!=null&&t2net!=null&&t2net<t1net;
+      const recv=st<0?1:st>0?2:0; // which team gets stroke on this hole
       if(t1v!=null){t1tot+=t1v;t1any=true;}
       if(t2v!=null){t2tot+=t2v;t2any=true;}
-      const vt1=t1v!=null?t1v:'';
-      const vt2=t2v!=null?t2v:'';
-      const hWinStyle=t1win?`border-bottom:3px solid ${state.team1.color};background:rgba(0,39,76,0.04);`:t2win?`border-bottom:3px solid ${state.team2.color};background:rgba(0,39,76,0.04);`:'';
-      hdrH+=`<th style="background:var(--blue);color:#fff;padding:5px 3px;text-align:center;font-size:12px;font-weight:bold;min-width:38px;">${h}</th>`;
-      hdrPar+=`<th style="background:var(--blue);color:rgba(255,255,255,0.55);padding:3px 2px;font-size:10px;font-weight:normal;text-align:center;">${par}</th>`;
-      hdrSI+=`<th style="background:var(--blue);color:rgba(255,255,255,0.4);padding:3px 2px;font-size:9px;font-weight:normal;text-align:center;">${si}</th>`;
-      if(hasTees) players.forEach((_,pi)=>{playerYdsRows[pi]+=`<th style="background:var(--blue);color:rgba(255,255,255,0.7);padding:3px 2px;font-size:9px;text-align:center;">${getHoleYards(m,h,pids[pi])||'—'}</th>`;});
-      if(showT1Yds) hdrT1Yds+=`<th style="background:var(--blue);color:rgba(255,255,255,0.45);padding:3px 2px;font-size:9px;text-align:center;">${getHoleYards(m,h,t1rep)||'—'}</th>`;
-      if(showT2Yds) hdrT2Yds+=`<th style="background:var(--blue);color:rgba(255,255,255,0.45);padding:3px 2px;font-size:9px;text-align:center;">${getHoleYards(m,h,t2rep)||'—'}</th>`;
-      if(absHd>0) hdrStrk+=`<th style="background:var(--blue);padding:3px 2px;text-align:center;">${absSt>0?`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${strokeColor};"></span>`:'<span style="color:rgba(255,255,255,0.15);font-size:9px;">·</span>'}</th>`;
-      t1row+=`<td style="padding:2px;border:1px solid rgba(0,39,76,0.07);${hWinStyle}"><input class="sc-input ${getScoreCls(hd2.t1,par)}" type="number" min="1" max="15" placeholder="—" value="${vt1}" onchange="updHole(${mi},${h},'t1',this.value,${par})"></td>`;
-      t2row+=`<td style="padding:2px;border:1px solid rgba(0,39,76,0.07);${hWinStyle}"><input class="sc-input ${getScoreCls(hd2.t2,par)}" type="number" min="1" max="15" placeholder="—" value="${vt2}" onchange="updHole(${mi},${h},'t2',this.value,${par})"></td>`;
+      return{h,par,si,hd2,t1v,t2v,t1win,t2win,recv,absSt:Math.abs(st)};
     });
-    const totHdr=`<th style="background:var(--blue);color:var(--maize);padding:5px 4px;font-size:10px;">TOT</th>`;
-    hdrH+=totHdr; hdrPar+=`<th style="background:var(--blue);"></th>`; hdrSI+=`<th style="background:var(--blue);"></th>`;
-    if(showT1Yds) hdrT1Yds+=`<th style="background:var(--blue);"></th>`;
-    if(showT2Yds) hdrT2Yds+=`<th style="background:var(--blue);"></th>`;
-    if(absHd>0) hdrStrk+=`<th style="background:var(--blue);"></th>`;
-    t1row+=`<td style="padding:4px;font-weight:bold;font-size:13px;color:var(--blue);background:rgba(0,39,76,0.05);text-align:center;">${t1any?t1tot:'—'}</td>`;
-    t2row+=`<td style="padding:4px;font-weight:bold;font-size:13px;color:var(--blue);background:rgba(0,39,76,0.05);text-align:center;">${t2any?t2tot:'—'}</td>`;
-    // Stroke legend
-    const legend=absHd>0?`<div style="font-size:10px;font-family:Arial;color:var(--text-muted);margin-bottom:4px;display:flex;align-items:center;gap:6px;">
-      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${receivingTeam===1?state.team1.color:state.team2.color};"></span>
-      <span>${receivingTeam===1?t1l:t2l} gets ${absHd} stroke${absHd!==1?'s':''} (${m.hdcpPercent||100}% allowance)</span>
-    </div>`:'';
-    const rows=[`<tr>${hdrH}</tr>`,`<tr>${hdrPar}</tr>`,`<tr>${hdrSI}</tr>`];
-    if(showT1Yds) rows.push(`<tr>${hdrT1Yds}</tr>`);
-    if(showT2Yds) rows.push(`<tr>${hdrT2Yds}</tr>`);
-    if(absHd>0) rows.push(`<tr>${hdrStrk}</tr>`);
-    return legend+`<table style="border-collapse:collapse;width:100%;margin-bottom:6px;"><thead>${rows.join('')}</thead><tbody><tr>${t1row}</tr><tr>${t2row}</tr></tbody></table>`;
+
+    const thStyle=`background:var(--blue);color:#fff;padding:6px 4px;text-align:center;font-size:13px;font-weight:bold;min-width:44px;`;
+    const parStyle=`background:var(--blue);color:rgba(255,255,255,0.5);padding:2px 4px;text-align:center;font-size:10px;`;
+    const siStyle=`background:rgba(0,39,76,0.85);color:rgba(255,255,255,0.45);padding:2px 4px;text-align:center;font-size:9px;`;
+
+    const hdrHoles=holeCols.map(c=>`<th style="${thStyle}">${c.h}${c.recv>0?`<span style="display:block;width:6px;height:6px;border-radius:50%;background:${c.recv===1?state.team1.color:state.team2.color};margin:1px auto 0;"></span>`:'<span style="display:block;height:7px;"></span>'}</th>`).join('');
+    const hdrPar=holeCols.map(c=>`<td style="${parStyle}">${c.par}</td>`).join('');
+    const hdrSI=holeCols.map(c=>`<td style="${siStyle}">${c.si}</td>`).join('');
+
+    function scoreRow(teamIdx){
+      const isT1=teamIdx===1;
+      const name=isT1?t1name:t2name;
+      const color=isT1?state.team1.color:state.team2.color;
+      const hcp=avgHT(isT1?m.team1Players:m.team2Players);
+      const cells=holeCols.map(c=>{
+        const v=isT1?c.t1v:c.t2v;
+        const win=isT1?c.t1win:c.t2win;
+        const cls=getScoreCls(v,c.par);
+        const key=isT1?'t1':'t2';
+        return`<td style="padding:3px;border:1px solid rgba(0,39,76,0.07);${win?`border-bottom:3px solid ${color};`:''}">
+          <input class="sc-input ${cls}" type="number" min="1" max="15" value="${v!=null?v:''}" placeholder="—"
+            onchange="updHole(${mi},${c.h},'${key}',this.value,${c.par})"
+            style="width:42px;font-size:16px;">
+        </td>`;
+      }).join('');
+      const tot=isT1?t1any?t1tot:'—':t2any?t2tot:'—';
+      return`<tr>
+        <td style="background:#fff;padding:6px 8px;white-space:nowrap;border-right:2px solid rgba(0,39,76,0.1);min-width:90px;">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+            <span style="font-size:13px;font-weight:bold;color:var(--blue);">${name.split('/')[0].trim()}</span>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted);padding-left:14px;">HCP ${hcp}</div>
+        </td>
+        ${cells}
+        <td style="padding:6px 4px;font-weight:bold;font-size:15px;color:var(--blue);background:rgba(0,39,76,0.04);text-align:center;min-width:36px;">${tot}</td>
+      </tr>`;
+    }
+
+    return`<div style="margin-bottom:12px;">
+      <table style="border-collapse:collapse;width:100%;">
+        <thead>
+          <tr>
+            <th style="background:var(--blue);color:var(--maize);padding:7px 8px;text-align:left;font-size:12px;font-weight:bold;">${label}</th>
+            ${hdrHoles}
+            <th style="background:var(--blue);color:var(--maize);padding:6px 4px;font-size:10px;">TOT</th>
+          </tr>
+          <tr><td style="${parStyle}text-align:left;padding-left:8px;">Par</td>${hdrPar}<td style="${parStyle}"></td></tr>
+          <tr><td style="${siStyle}text-align:left;padding-left:8px;">SI</td>${hdrSI}<td style="${siStyle}"></td></tr>
+        </thead>
+        <tbody>${scoreRow(1)}${scoreRow(2)}</tbody>
+      </table>
+    </div>`;
   }
 
-  /* ── INDIVIDUAL horizontal block ── */
+  // ── INDIVIDUAL BLOCK ────────────────────────────────────────────────────────
   function indBlock(holeList,label){
     if(!holeList.length) return '';
     const pids=m.indPlayers||[];
     const players=pids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
-    const pcolors=pids.map(id=>AVC[state.players.findIndex(p=>p.id===id)%AVC.length]);
     if(!players.length) return '';
-    const minHcp=Math.min(...players.map(p=>p.handicap||0));
-    // Per-player handicap diffs vs lowest handicap player
-    const pDiffs=players.map(p=>Math.round(((p.handicap||0)-minHcp)*(m.hdcpPercent||100)/100));
-    const hasTees=!!(cd&&cd.tees&&cd.tees.length>0);
-    let hdrH=`<th style="background:var(--blue);color:var(--maize);padding:5px 6px;font-size:11px;font-weight:bold;text-align:left;">${label}</th>`;
-    let hdrPar=`<th style="background:var(--blue);color:rgba(255,255,255,0.5);padding:3px 6px;font-size:10px;font-weight:normal;text-align:left;">Par</th>`;
-    let hdrSI=`<th style="background:var(--blue);color:rgba(255,255,255,0.4);padding:3px 6px;font-size:9px;font-weight:normal;text-align:left;">SI</th>`;
-    // Per-player yardage rows
-    let playerYdsRows=hasTees?players.map((_,pi)=>`<th style="background:var(--blue);color:rgba(255,255,255,0.75);padding:3px 6px;font-size:9px;font-weight:normal;text-align:left;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${pcolors[pi]};margin-right:3px;vertical-align:middle;"></span>${(cd.tees[(m.playerTees&&m.playerTees[pids[pi]]!=null?m.playerTees[pids[pi]]:m.selectedTee||0)])||'Yds'}</th>`):[];
-    let playerRows=players.map(()=>'');
+    const pcolors=pids.map((_,i)=>AVC[i%AVC.length]);
+    const minH=Math.min(...players.map(p=>p.handicap||0));
+    const diffs=players.map(p=>Math.round(((p.handicap||0)-minH)*(m.hdcpPercent||100)/100));
+    const cSides=m.indPlayerSides||{};
+
     let totals=players.map(()=>({t:0,any:false}));
-    holeList.forEach(h=>{
+
+    const holeCols=holeList.map(h=>{
       const{hd2,par,si}=holeInfo(h);
-      // Net scores for each player
-      const nets=players.map((p,pi)=>{
-        const raw=hd2['p'+pi];
-        if(raw==null) return null;
-        const st=strokesOn(pDiffs[pi],si,m.totalHoles);
-        return raw-st;
-      });
+      const raws=players.map((_,pi)=>hd2['p'+pi]!=null?hd2['p'+pi]:null);
+      const nets=players.map((_,pi)=>raws[pi]!=null?raws[pi]-strokesOn(diffs[pi],si,m.totalHoles):null);
       const validNets=nets.filter(n=>n!==null);
       const minNet=validNets.length?Math.min(...validNets):null;
-      // Count strokes each player gets on this hole
-      const strokesPerPlayer=players.map((_,pi)=>strokesOn(pDiffs[pi],si,m.totalHoles));
-      hdrH+=`<th style="background:var(--blue);color:#fff;padding:5px 3px;text-align:center;font-size:12px;font-weight:bold;min-width:38px;">${h}</th>`;
-      hdrPar+=`<th style="background:var(--blue);color:rgba(255,255,255,0.55);padding:3px 2px;font-size:10px;font-weight:normal;text-align:center;">${par}</th>`;
-      hdrSI+=`<th style="background:var(--blue);color:rgba(255,255,255,0.4);padding:3px 2px;font-size:9px;font-weight:normal;text-align:center;">${si}</th>`;
-      if(hasTees) players.forEach((_,pi)=>{playerYdsRows[pi]+=`<th style="background:var(--blue);color:rgba(255,255,255,0.7);padding:3px 2px;font-size:9px;text-align:center;">${getHoleYards(m,h,pids[pi])||'—'}</th>`;});
-      players.forEach((p,pi)=>{
-        const raw=hd2['p'+pi];
-        const v=raw!=null?raw:'';
-        const cls=getScoreCls(raw,par);
-        const st=strokesPerPlayer[pi];
-        const isWinner=minNet!==null&&nets[pi]===minNet&&validNets.filter(n=>n===minNet).length===1;
-        const oc=`updHoleInd(${mi},${h},${pi},'sc-${mi}-${h}-${pi}',this.value,${par})`;
-        const hasPinnie=(hd2.pinnies||[]).includes(pids[pi]);
-        const isParThree=par===3||(!(cd&&cd.holes));
-        const hasCtpThis=(hd2.ctp||null)===pids[pi];
-        const flagOn='<svg width="10" height="12" viewBox="0 0 14 16" fill="none"><line x1="2" y1="1" x2="2" y2="15" stroke="#52b788" stroke-width="1.5" stroke-linecap="round"/><path d="M2 2 L12 5 L2 9 Z" fill="#52b788" stroke="#52b788" stroke-width="1.2" stroke-linejoin="round"/></svg>';
-        const flagOff='<svg width="10" height="12" viewBox="0 0 14 16" fill="none"><line x1="2" y1="1" x2="2" y2="15" stroke="#8fa8c8" stroke-width="1.5" stroke-linecap="round"/><path d="M2 2 L12 5 L2 9 Z" fill="none" stroke="#8fa8c8" stroke-width="1.2" stroke-linejoin="round"/></svg>';
-        const ctpOn='<svg width="10" height="10" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="10" r="3" stroke="#e9c46a" stroke-width="1.3" fill="#e9c46a"/><line x1="7" y1="1" x2="7" y2="8" stroke="#e9c46a" stroke-width="1.3" stroke-linecap="round"/><path d="M7 1 L12 3.5 L7 6 Z" fill="#e9c46a" stroke-width="0.5"/></svg>';
-        const ctpOff='<svg width="10" height="10" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="10" r="3" stroke="#8fa8c8" stroke-width="1.3" fill="none"/><line x1="7" y1="1" x2="7" y2="8" stroke="#8fa8c8" stroke-width="1.3" stroke-linecap="round"/><path d="M7 1 L12 3.5 L7 6 Z" fill="none" stroke="#8fa8c8" stroke-width="0.8"/></svg>';
-        if(raw!=null){totals[pi].t+=raw;totals[pi].any=true;}
-        // Stroke indicator: small dot above cell for players receiving strokes
-        const strkDot=st>0?`<div style="text-align:center;line-height:1;">${'<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:'+pcolors[pi]+';margin:0 1px;"></span>'.repeat(Math.min(st,2))}</div>`:'';
-        playerRows[pi]+=`<td style="padding:2px;border:1px solid rgba(0,39,76,0.07);${isWinner?`border-bottom:3px solid ${pcolors[pi]};background:rgba(0,39,76,0.03);`:''}">
-          ${strkDot}
-          <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
-            <input id="sc-${mi}-${h}-${pi}" class="sc-input ${cls}" type="number" min="1" max="15" placeholder="—" value="${v}" onchange="${oc}">
-            <div style="display:flex;gap:1px;">
-              <button onclick="togglePinnie(${mi},${h},'${pids[pi]}',${hasPinnie?'false':'true'},this)" style="background:none;border:none;cursor:pointer;padding:0;line-height:0;">${hasPinnie?flagOn:flagOff}</button>
-              ${isParThree?`<button onclick="toggleCtp(${mi},${h},'${pids[pi]}',this)" data-ctp-hole="${mi}-${h}" data-ctp-pid="${pids[pi]}" style="background:none;border:none;cursor:pointer;padding:0;line-height:0;">${hasCtpThis?ctpOn:ctpOff}</button>`:''}
-            </div>
-          </div>
+      const winner=minNet!==null&&validNets.filter(n=>n===minNet).length===1
+        ?nets.findIndex(n=>n===minNet):-1;
+      raws.forEach((r,pi)=>{if(r!=null){totals[pi].t+=r;totals[pi].any=true;}});
+      return{h,par,si,hd2,raws,winner};
+    });
+
+    const thStyle=`background:var(--blue);color:#fff;padding:6px 4px;text-align:center;font-size:13px;font-weight:bold;min-width:44px;`;
+    const parStyle=`background:var(--blue);color:rgba(255,255,255,0.5);padding:2px 4px;text-align:center;font-size:10px;`;
+    const siStyle=`background:rgba(0,39,76,0.85);color:rgba(255,255,255,0.45);padding:2px 4px;text-align:center;font-size:9px;`;
+
+    const hdrHoles=holeCols.map(c=>`<th style="${thStyle}">${c.h}<span style="display:block;height:7px;"></span></th>`).join('');
+    const hdrPar=holeCols.map(c=>`<td style="${parStyle}">${c.par}</td>`).join('');
+    const hdrSI=holeCols.map(c=>`<td style="${siStyle}">${c.si}</td>`).join('');
+
+    const playerRows=players.map((p,pi)=>{
+      const color=pcolors[pi];
+      const side=cSides[p.id]==='2'?state.team2.color:state.team1.color;
+      const strkLabel=diffs[pi]>0?` +${diffs[pi]}`:'';
+      const yds=getHoleYards(m,holeList[0],p.id);
+      const teeName=getPlayerTeeName(m,p.id);
+      const cells=holeCols.map(c=>{
+        const raw=c.raws[pi];
+        const isWinner=c.winner===pi;
+        const cls=getScoreCls(raw,c.par);
+        // Stroke dot
+        const st=strokesOn(diffs[pi],c.si,m.totalHoles);
+        const dot=st>0?`<span style="display:block;width:5px;height:5px;border-radius:50%;background:${color};margin:1px auto 0;"></span>`:'<span style="display:block;height:6px;"></span>';
+        return`<td style="padding:3px;border:1px solid rgba(0,39,76,0.06);${isWinner?`border-bottom:3px solid ${color};background:rgba(46,125,50,0.05);`:''}">
+          ${dot}
+          <input id="sc-${mi}-${c.h}-${pi}" class="sc-input ${cls}" type="number" min="1" max="15"
+            value="${raw!=null?raw:''}" placeholder="—"
+            onchange="updHoleInd(${mi},${c.h},${pi},'sc-${mi}-${c.h}-${pi}',this.value,${c.par})"
+            style="width:42px;font-size:16px;${isWinner?'color:#1B5E20;font-weight:bold;':''}">
         </td>`;
-      });
-    });
-    hdrH+=`<th style="background:var(--blue);color:var(--maize);padding:5px 4px;font-size:10px;">TOT</th>`;
-    hdrPar+=`<th style="background:var(--blue);"></th>`;
-    hdrSI+=`<th style="background:var(--blue);"></th>`;
-    if(hasTees) players.forEach((_,pi)=>{playerYdsRows[pi]+=`<th style="background:var(--blue);"></th>`;});
-    players.forEach((p,pi)=>{
-      playerRows[pi]+=`<td style="padding:4px;font-weight:bold;font-size:13px;color:var(--blue);background:rgba(0,39,76,0.05);text-align:center;">${totals[pi].any?totals[pi].t:'—'}</td>`;
-    });
-    const playerRowsHTML=players.map((p,pi)=>{
-      const strkLabel=pDiffs[pi]>0?` +${pDiffs[pi]}`:'';
-      return`<tr><td style="background:var(--blue);color:#fff;font-weight:bold;padding:5px 6px;font-size:11px;font-family:Arial;white-space:nowrap;">${p.name.split(' ')[0]}<br><span style="font-size:9px;color:${pcolors[pi]};font-weight:normal;">HCP${p.handicap}${strkLabel}</span></td>${playerRows[pi]}</tr>`;
+      }).join('');
+      return`<tr>
+        <td style="background:#fff;padding:6px 8px;white-space:nowrap;border-right:2px solid rgba(0,39,76,0.1);min-width:100px;">
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span style="width:9px;height:9px;border-radius:50%;background:${side};flex-shrink:0;"></span>
+            <span style="font-size:13px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted);padding-left:14px;">HCP${p.handicap}${strkLabel}${teeName?' · '+teeName:''}</div>
+        </td>
+        ${cells}
+        <td style="padding:6px 4px;font-weight:bold;font-size:15px;color:var(--blue);background:rgba(0,39,76,0.04);text-align:center;min-width:36px;">${totals[pi].any?totals[pi].t:'—'}</td>
+      </tr>`;
     }).join('');
-    // Legend
-    const hasStrokes=pDiffs.some(d=>d>0);
-    const legend=hasStrokes?`<div style="font-size:10px;font-family:Arial;color:var(--text-muted);margin-bottom:4px;padding:4px 0;">
-      ${players.filter((_,pi)=>pDiffs[pi]>0).map((p,i)=>{const pi=players.indexOf(p);return`<span style="margin-right:8px;display:inline-flex;align-items:center;gap:3px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pcolors[pi]};"></span><span style="color:var(--blue);font-weight:bold;">${p.name.split(' ')[0]}</span> +${pDiffs[pi]} stroke${pDiffs[pi]!==1?'s':''}</span>`;}).join('')}
-    </div>`:'';
-    const ydsRowsHTML=hasTees?players.map((_,pi)=>`<tr>${playerYdsRows[pi]}</tr>`).join(''):'';
-    return legend+`<table style="border-collapse:collapse;width:100%;margin-bottom:6px;"><thead><tr>${hdrH}</tr><tr>${hdrPar}</tr><tr>${hdrSI}</tr>${ydsRowsHTML}</thead><tbody>${playerRowsHTML}</tbody></table>`;
+
+    return`<div style="margin-bottom:12px;">
+      <table style="border-collapse:collapse;width:100%;">
+        <thead>
+          <tr>
+            <th style="background:var(--blue);color:var(--maize);padding:7px 8px;text-align:left;font-size:12px;font-weight:bold;">${label}</th>
+            ${hdrHoles}
+            <th style="background:var(--blue);color:var(--maize);padding:6px 4px;font-size:10px;">TOT</th>
+          </tr>
+          <tr><td style="${parStyle}text-align:left;padding-left:8px;">Par</td>${hdrPar}<td style="${parStyle}"></td></tr>
+          <tr><td style="${siStyle}text-align:left;padding-left:8px;">SI</td>${hdrSI}<td style="${siStyle}"></td></tr>
+        </thead>
+        <tbody>${playerRows}</tbody>
+      </table>
+    </div>`;
   }
 
-
-  // Build content
+  // ── BUILD MODAL ─────────────────────────────────────────────────────────────
   const res=mResult(m);
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
   const t1l=mLabel(m,1),t2l=mLabel(m,2);
   const hd=hDiff(m),absHd=Math.abs(hd);
-  const recv=hd<0?state.team1.name+' gets':hd>0?state.team2.name+' gets':'';
+  const recv=hd<0?state.team1.name:hd>0?state.team2.name:'';
+  const courseName=cd?cd.name:'';
   const bodyHTML=isInd
-    ?(m.totalHoles===18?indBlock(front,'Front')+indBlock(back,'Back'):indBlock(holes,holes[0]>=10?'Back 9':'Front 9'))
-    :(m.totalHoles===18?teamBlock(front,'Front')+teamBlock(back,'Back'):teamBlock(holes,holes[0]>=10?'Back 9':'Front 9'));
+    ?(m.totalHoles===18?indBlock(front,'Front 9')+indBlock(back,'Back 9'):indBlock(holes,'Holes'))
+    :(m.totalHoles===18?teamBlock(front,'Front 9')+teamBlock(back,'Back 9'):teamBlock(holes,'Holes'));
 
-  modal=`<div class="modal" onclick="event.stopPropagation()" style="max-width:98vw;width:98vw;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div class="modal-title" style="color:var(--blue);">Scorecard</div>
+  modal=`<div class="modal" onclick="event.stopPropagation()" style="padding:16px 14px;">
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">
+      <div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);font-family:Arial;margin-bottom:4px;">${FORMATS[m.format]||m.format}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:16px;font-weight:bold;color:${state.team1.color};">${t1l}</span>
+          <span style="font-size:12px;color:var(--text-dim);">vs</span>
+          <span style="font-size:16px;font-weight:bold;color:${state.team2.color};">${t2l}</span>
+        </div>
+        ${courseName?`<div style="font-size:11px;color:var(--green-light);font-family:Arial;margin-top:3px;">⛳ ${courseName}</div>`:''}
+      </div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
-      <span style="font-size:12px;color:${state.team1.color};font-weight:bold;font-family:Arial;">${t1l}</span>
-      <span style="color:var(--text-dim);font-size:11px;">vs</span>
-      <span style="font-size:12px;color:${state.team2.color};font-weight:bold;font-family:Arial;">${t2l}</span>
-      <span class="badge badge-gold">${FORMATS[m.format]}</span>
-    </div>
-    ${absHd>0?`<div class="info-box" style="margin-bottom:8px;"><b style="color:var(--blue);">${recv} ${absHd} stroke${absHd!==1?'s':''}</b> (${m.hdcpPercent||100}% allowance)</div>`:''}
-    <div class="sc-wrap">${bodyHTML}</div>
-    <div id="sc-status" style="margin-top:8px;padding:8px;background:rgba(0,39,76,0.04);border:1px solid rgba(0,39,76,0.1);border-radius:var(--radius);text-align:center;">
-      <span class="status-bubble ${sc}" style="font-size:14px;">${res.status}</span>
+    <!-- Handicap info -->
+    ${absHd>0?`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(0,39,76,0.05);border-radius:var(--radius);margin-bottom:12px;border-left:3px solid var(--blue);">
+      <span style="font-size:13px;color:var(--blue);">🏌️ <b>${recv}</b> gets ${absHd} stroke${absHd!==1?'s':''} <span style="color:var(--text-muted);font-size:11px;">(${m.hdcpPercent||100}% allowance)</span></span>
+    </div>`:''}
+    <!-- Scorecard -->
+    <div class="sc-wrap" style="margin:0 -14px;">${bodyHTML}</div>
+    <!-- Status bar -->
+    <div id="sc-status" style="margin-top:12px;padding:10px;background:var(--blue);border-radius:var(--radius);text-align:center;">
+      <span class="status-bubble ${sc}" style="font-size:16px;background:rgba(255,255,255,0.15);color:#fff;">${res.status}</span>
     </div>
   </div>`;
   render();
 }
+
 function getTeeName(m){const cd=m.courseData||state.settings.courseData;if(!cd||!cd.tees)return'';return cd.tees[m.selectedTee||0]||'';}
 function getHoleYards(m,h,pid){
   const cd=m.courseData||state.settings.courseData;
@@ -1432,7 +1441,7 @@ function openCourseBuilder(fs,editIdx){
     </tr>`;
   }
   const teeHeaders=teeNames.map(t=>`<th style="padding:4px 2px;font-size:10px;color:var(--blue);font-family:Arial;min-width:46px;">${t}</th>`).join('');
-  modal=`<div class="modal" onclick="event.stopPropagation()" style="max-width:520px;max-height:90vh;overflow-y:auto;">
+  modal=`<div class="modal" onclick="event.stopPropagation()" style="max-width:480px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;position:sticky;top:0;background:#fff;padding-bottom:8px;z-index:1;border-bottom:2px solid var(--maize);">
       <div class="modal-title">${editing?'Edit Course':'Create Course'}</div>
       <button class="modal-close" onclick="openCourseSearch(${fs})">✕</button>
@@ -1556,14 +1565,18 @@ async function doCSrch(fs){
       +'<div style="background:#fff;border-radius:var(--radius);overflow:hidden;border:1px solid rgba(0,39,76,0.12);max-height:320px;overflow-y:auto;">'
       +courses.map(c=>{
         const loc=[c.city,c.state_name||c.country].filter(Boolean).join(', ');
-        const par=c.tees&&c.tees[0]?c.tees[0].par_total:'?';
+        // tees can be {male:[...], female:[...]} or a flat array
         const maleTees=c.tees?(Array.isArray(c.tees)?c.tees:(c.tees.male||[])):[];
-        const teeCount=maleTees.length;
-        const teeNames=maleTees.slice(0,4).map(t=>t.tee_name||'').filter(Boolean).join('/');
+        const par=maleTees.length&&maleTees[0].par_total?maleTees[0].par_total:'';
+        const teeNames=maleTees.slice(0,5).map(t=>t.tee_name||'').filter(Boolean).join(' · ');
         const key=_cacheCourse(c);
-        return '<div class="course-result-item" data-ckey="'+key+'" data-fs="'+(fs?1:0)+'" onclick="_clickApiCourse(this)" style="cursor:pointer;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">'
-          +'<div style="font-weight:bold;font-size:13px;color:var(--blue);">'+c.club_name+'</div>'
-          +'<div style="color:var(--text-muted);font-size:11px;font-family:Arial;">'+loc+(par?' · Par '+par:'')+(teeNames?' · '+teeNames:teeCount?' · '+teeCount+' tees':'')+'</div>'
+        return '<div class="course-result-item" data-ckey="'+key+'" data-fs="'+(fs?1:0)+'" onclick="_clickApiCourse(this)" style="cursor:pointer;padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.06);">'
+          +'<div style="font-weight:bold;font-size:14px;color:var(--blue);margin-bottom:3px;">'+c.club_name+'</div>'
+          +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+          +(loc?'<span style="font-size:12px;color:var(--text-muted);font-family:Arial;">📍 '+loc+'</span>':'')
+          +(par?'<span style="font-size:12px;font-weight:bold;color:var(--blue);font-family:Arial;background:rgba(0,39,76,0.07);padding:1px 7px;border-radius:10px;">Par '+par+'</span>':'')
+          +(teeNames?'<span style="font-size:11px;color:var(--text-dim);font-family:Arial;">'+teeNames+'</span>':'')
+          +'</div>'
           +'</div>';
       }).join('')
       +'</div>';
@@ -1588,11 +1601,13 @@ function renderBuiltinList(fs,q){
       const isSaved=c._saved;
       const idx=isSaved?(state.savedCourses||[]).findIndex(s=>s.id===c.id):-1;
       const key=_cacheCourse(c);
-      return '<div class="course-result-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">'
-
+      return '<div class="course-result-item" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.06);">'
         +'<div style="flex:1;cursor:pointer;" data-ckey="'+key+'" data-fs="'+(fs?1:0)+'" onclick="_clickBuiltinCourse(this)">'
-          +'<div style="font-weight:bold;font-size:13px;color:var(--blue);">'+c.name+(isSaved?' <span style="font-size:9px;padding:1px 5px;background:rgba(0,39,76,0.1);color:var(--blue);border-radius:10px;">Saved</span>':'')+'</div>'
-          +'<div style="color:var(--text-muted);font-size:11px;">'+(c.location||'')+' · Par '+c.total_par+'</div>'
+          +'<div style="font-weight:bold;font-size:14px;color:var(--blue);margin-bottom:3px;">'+c.name+(isSaved?' <span style="font-size:9px;padding:1px 5px;background:rgba(0,39,76,0.1);color:var(--blue);border-radius:10px;">Saved</span>':'')+'</div>'
+          +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+          +(c.location?'<span style="font-size:12px;color:var(--text-muted);font-family:Arial;">📍 '+c.location+'</span>':'')
+          +(c.total_par?'<span style="font-size:12px;font-weight:bold;color:var(--blue);font-family:Arial;background:rgba(0,39,76,0.07);padding:1px 7px;border-radius:10px;">Par '+c.total_par+'</span>':'')
+          +'</div>'
         +'</div>'
         +(isSaved?'<div style="display:flex;gap:4px;">'
           +'<button class="btn btn-sm btn-ghost" style="font-size:10px;" onclick="editSavedCourse('+idx+','+(fs?1:0)+')">Edit</button>'
