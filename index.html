@@ -913,7 +913,7 @@ function renderMatchCard(m,i){
       if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(m),si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
     }
     const dotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
-    dots+=`<div class="hp-dot" style="background:${dotBg};" title="Hole ${h}"></div>`;
+    dots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${dotBg};"></div></div>`;
   }
   const cn=m.courseData?m.courseData.name:(state.settings.courseData?state.settings.courseData.name:'');
   const myPid=state.players.find(p=>p.name===state.myName)?.id;
@@ -1025,7 +1025,7 @@ function renderGroupCard(parent,pi,children){
     const d=(parent.holes||{})[h];let cls='pending';
     if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(parent),si=holeSI(parent,h),st=strokesOn(hd,si,parent.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
     const pDotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
-    pDots+=`<div class="hp-dot" style="background:${pDotBg};" title="Hole ${h}"></div>`;
+    pDots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${pDotBg};"></div></div>`;
   }
   const pSc=pRes.winner==='team1'?'status-t1':pRes.winner==='team2'?'status-t2':'status-as';
   let pt1t=0,pt2t=0;
