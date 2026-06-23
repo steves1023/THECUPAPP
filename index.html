@@ -912,7 +912,8 @@ function renderMatchCard(m,i){
     } else {
       if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(m),si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
     }
-    dots+=`<div class="hp-dot ${cls}" title="Hole ${h}"></div>`;
+    const dotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
+    dots+=`<div class="hp-dot" style="background:${dotBg};" title="Hole ${h}"></div>`;
   }
   const cn=m.courseData?m.courseData.name:(state.settings.courseData?state.settings.courseData.name:'');
   const myPid=state.players.find(p=>p.name===state.myName)?.id;
@@ -1023,7 +1024,8 @@ function renderGroupCard(parent,pi,children){
   for(let h=1;h<=parent.totalHoles;h++){
     const d=(parent.holes||{})[h];let cls='pending';
     if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(parent),si=holeSI(parent,h),st=strokesOn(hd,si,parent.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
-    pDots+=`<div class="hp-dot ${cls}" title="Hole ${h}"></div>`;
+    const pDotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
+    pDots+=`<div class="hp-dot" style="background:${pDotBg};" title="Hole ${h}"></div>`;
   }
   const pSc=pRes.winner==='team1'?'status-t1':pRes.winner==='team2'?'status-t2':'status-as';
   let pt1t=0,pt2t=0;
@@ -1160,12 +1162,55 @@ function renderGroupCard(parent,pi,children){
 }
 
 
+/* Render a score cell with TV-style birdie/eagle circles and bogey squares */
+function scoreCellStyle(score, par){
+  // Returns {tdStyle, innerHtml} for rendering score in a table cell
+  if(score == null) return {tdStyle:'background:#fafafa;border:1px solid rgba(0,39,76,0.08);', innerHtml:`<span style="font-size:15px;font-weight:bold;color:rgba(0,39,76,0.25);">${score!=null?score:''}</span>`};
+  const diff = score - par;
+  const num = `<span style="font-size:15px;font-weight:bold;">${score}</span>`;
+  if(diff <= -2){
+    // Eagle: number inside circle inside circle
+    return{tdStyle:'background:#fff;border:1px solid rgba(0,39,76,0.08);',
+      innerHtml:`<div style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:2px solid #1B5E20;"><div style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:2px solid #1B5E20;background:#e8f5e9;"><span style="font-size:14px;font-weight:bold;color:#1B5E20;">${score}</span></div></div>`};
+  }
+  if(diff === -1){
+    // Birdie: number inside single circle
+    return{tdStyle:'background:#fff;border:1px solid rgba(0,39,76,0.08);',
+      innerHtml:`<div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;border:2px solid #2E7D32;background:#e8f5e9;"><span style="font-size:14px;font-weight:bold;color:#1B5E20;">${score}</span></div>`};
+  }
+  if(diff === 0){
+    // Par: plain number, subtle border
+    return{tdStyle:'background:#fff;border:1px solid rgba(0,39,76,0.12);',
+      innerHtml:`<span style="font-size:15px;font-weight:bold;color:var(--blue);">${score}</span>`};
+  }
+  if(diff === 1){
+    // Bogey: number inside single square
+    return{tdStyle:'background:#fff;border:1px solid rgba(0,39,76,0.08);',
+      innerHtml:`<div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:3px;border:2px solid #C0392B;"><span style="font-size:14px;font-weight:bold;color:#C0392B;">${score}</span></div>`};
+  }
+  // Double bogey+: number inside square inside square
+  return{tdStyle:'background:#fff;border:1px solid rgba(0,39,76,0.08);',
+    innerHtml:`<div style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:4px;border:2px solid #C0392B;"><div style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:2px;border:2px solid #8B0000;background:#fdecea;"><span style="font-size:14px;font-weight:bold;color:#8B0000;">${score}</span></div></div>`};
+}
+
 function openScorecard(mi,startHole){
   const m=state.matches[mi];
   const isInd=m.matchType==='individual';
   const cd=m.courseData||state.settings.courseData;
   const holes=matchHoles(m);
-  const currentHole=startHole||holes[0];
+
+  // Default to first hole without a score
+  function firstEmpty(){
+    return holes.find(h=>{
+      const d=m.holes[h]||{};
+      if(isInd) return (m.indPlayers||[]).every((_,pi)=>d['p'+pi]==null);
+      return d.t1==null&&d.t2==null;
+    })||holes[0];
+  }
+  const currentHole=startHole||firstEmpty();
+  const holeIdx=holes.indexOf(currentHole);
+  const prevHole=holeIdx>0?holes[holeIdx-1]:null;
+  const nextHole=holeIdx<holes.length-1?holes[holeIdx+1]:null;
 
   function holeInfo(h){
     const hd2=m.holes[h]||{};
@@ -1174,17 +1219,11 @@ function openScorecard(mi,startHole){
   }
 
   const{hd2,par,si}=holeInfo(currentHole);
-  const holeIdx=holes.indexOf(currentHole);
-  const prevHole=holeIdx>0?holes[holeIdx-1]:null;
-  const nextHole=holeIdx<holes.length-1?holes[holeIdx+1]:null;
   const hd=hDiff(m), absHd=Math.abs(hd);
   const res=mResult(m);
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
 
-  // Yardage for this hole
-  function playerYds(pid){ const y=getHoleYards(m,currentHole,pid); return y?`<span style="font-size:11px;color:var(--text-muted);">${y}y</span>`:''; }
-
-  // Hole progress dots
+  // Progress dots
   let progressDots='';
   holes.forEach(h=>{
     const d=m.holes[h]||{};
@@ -1201,137 +1240,198 @@ function openScorecard(mi,startHole){
       if(d.t1!=null&&d.t2!=null){const hsi=holeSI(m,h),st=strokesOn(hd,hsi,m.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
     }
     const isCurrent=h===currentHole;
-    progressDots+=`<div onclick="openScorecard(${mi},${h})" style="cursor:pointer;width:${isCurrent?'18px':'12px'};height:${isCurrent?'18px':'12px'};border-radius:${isCurrent?'50%':'3px'};background:${isCurrent?'var(--maize)':cls==='win1'?'var(--blue)':cls==='win2'?'var(--maize)':cls==='halve'?'rgba(0,39,76,0.3)':'rgba(0,39,76,0.1)'};border:${isCurrent?'2px solid var(--blue)':'none'};transition:all 0.15s;flex-shrink:0;"></div>`;
+    const bg=isCurrent?'rgba(255,255,255,0.9)':cls==='win1'?state.team1.color:cls==='win2'?state.team2.color:cls==='halve'?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.15)';
+    progressDots+=`<div onclick="openScorecard(${mi},${h})" style="cursor:pointer;width:${isCurrent?'18px':'12px'};height:${isCurrent?'18px':'12px'};border-radius:${isCurrent?'50%':'3px'};background:${bg};border:${isCurrent?'2px solid rgba(255,255,255,0.6)':'none'};flex-shrink:0;transition:all 0.15s;"></div>`;
   });
 
-  // Score inputs — team or individual
-  let scoreInputs='';
+  // Build players/teams list for this hole
+  let rows='';
   if(isInd){
     const pids=m.indPlayers||[];
     const players=pids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
-    const pcolors=pids.map((_,i)=>AVC[i%AVC.length]);
     const cSides=m.indPlayerSides||{};
     const minH=players.length?Math.min(...players.map(p=>p.handicap||0)):0;
     const diffs=players.map(p=>Math.round(((p.handicap||0)-minH)*(m.hdcpPercent||100)/100));
+    const pinnies=hd2.pinnies||[];
+    const ctpPid=hd2.ctp||null;
     const isPar3=par===3;
 
-    // Pinnies — who has it this hole
-    const pinnies=(hd2.pinnies||[]);
-    const ctpPid=hd2.ctp||null;
-
-    scoreInputs=players.map((p,pi)=>{
+    rows=players.map((p,pi)=>{
       const raw=hd2['p'+pi];
       const st=strokesOn(diffs[pi],si,m.totalHoles);
       const tc=cSides[p.id]==='2'?state.team2.color:state.team1.color;
       const hasPinnie=pinnies.includes(p.id);
       const hasCtp=ctpPid===p.id;
       const yds=getHoleYards(m,currentHole,p.id);
-      const teeName=getPlayerTeeName(m,p.id);
-      const cls=getScoreCls(raw,par);
-      return`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.07);">
-        <div style="width:36px;height:36px;border-radius:50%;background:${tc};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <span style="font-size:13px;font-weight:bold;color:#fff;">${p.name[0]}</span>
-        </div>
-        <div style="flex:1;min-width:0;">
-          <div style="display:flex;align-items:baseline;gap:6px;">
-            <span style="font-size:15px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
-            <span style="font-size:11px;color:var(--text-muted);">HCP${p.handicap}${st>0?` <span style="color:${pcolors[pi]};font-weight:bold;">+${st}</span>`:''}${teeName?' · '+teeName:''}</span>
-            ${yds?`<span style="font-size:11px;color:var(--text-dim);">${yds}y</span>`:''}
+      const cs=scoreCellStyle(raw,par);
+
+      // Score selector row (1-10)
+      const btns=[1,2,3,4,5,6,7,8,9,10].map(s=>{
+        const sel=raw===s;
+        const bcs=scoreCellStyle(sel?s:null,par);
+        const selC=scoreCellStyle(s,par);
+        return`<td onclick="updHoleIndAndRefresh(${mi},${currentHole},${pi},${s},${par})"
+          style="width:9%;text-align:center;padding:5px 2px;cursor:pointer;${sel?'background:#f0f7f0;border:1px solid rgba(46,125,50,0.2);':'border:1px solid rgba(0,39,76,0.08);background:#fafafa;'}vertical-align:middle;">
+          ${sel?selC.innerHtml:`<span style="font-size:15px;font-weight:bold;color:rgba(0,39,76,0.35);">${s}</span>`}
+        </td>`;
+      }).join('');
+
+      const net=raw!=null?raw-st:null;
+      const netLabel=net!=null?`(net ${net})`:'';
+      return`<tr style="border-bottom:1px solid rgba(0,39,76,0.08);">
+        <td style="padding:10px 10px;background:#fff;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="position:relative;flex-shrink:0;">
+              <div style="width:32px;height:32px;border-radius:50%;background:${tc};display:flex;align-items:center;justify-content:center;">
+                <span style="font-size:12px;font-weight:bold;color:#fff;">${p.name[0]}</span>
+              </div>
+              ${st>0?`<div style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#FFCB05;border:2px solid #fff;display:flex;align-items:center;justify-content:center;"><span style="font-size:9px;font-weight:bold;color:#00274C;">+${st}</span></div>`:''}
+            </div>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+                <span style="font-size:10px;color:var(--text-muted);">HCP${p.handicap}</span>
+                ${yds?`<span style="font-size:10px;color:var(--text-dim);">${yds}y</span>`:''}
+              </div>
+              ${raw!=null?`<div style="font-size:11px;color:var(--text-muted);margin-top:1px;">Gross <b style="color:var(--blue);">${raw}</b> · Net <b style="color:${net<=par-1?'#1B5E20':net>par?'#C0392B':'var(--blue)'};">${net}</b> vs par ${par}</div>`:''}
+            </div>
+            <div style="display:flex;gap:5px;flex-shrink:0;">
+              <button onclick="togglePinnieHole(${mi},${currentHole},'${p.id}',${hasPinnie?'false':'true'})"
+                style="padding:4px 9px;border-radius:12px;border:1.5px solid ${hasPinnie?'#2d6a4f':'rgba(0,39,76,0.12)'};background:${hasPinnie?'rgba(46,125,50,0.12)':'#fff'};cursor:pointer;font-size:12px;color:${hasPinnie?'#2d6a4f':'var(--text-muted)'};font-weight:bold;">
+                🚩${hasPinnie?' ✓':''}
+              </button>
+              ${isPar3?`<button onclick="toggleCtpHole(${mi},${currentHole},'${p.id}',${hasCtp?'false':'true'})"
+                style="padding:4px 9px;border-radius:12px;border:1.5px solid ${hasCtp?'#7A5900':'rgba(0,39,76,0.12)'};background:${hasCtp?'rgba(255,203,5,0.15)':'#fff'};cursor:pointer;font-size:12px;color:${hasCtp?'#7A5900':'var(--text-muted)'};font-weight:bold;">
+                ⛳${hasCtp?' ✓':''}
+              </button>`:''}
+            </div>
           </div>
-          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
-            <button onclick="togglePinnieHole(${mi},${currentHole},'${p.id}',${hasPinnie?'false':'true'})" 
-              style="display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;border:1.5px solid ${hasPinnie?'#2d6a4f':'rgba(0,39,76,0.15)'};background:${hasPinnie?'rgba(46,125,50,0.12)':'#fff'};cursor:pointer;font-size:12px;font-weight:bold;color:${hasPinnie?'#2d6a4f':'var(--text-muted)'};">
-              🚩 Pinnie${hasPinnie?' ✓':''}
-            </button>
-            ${isPar3?`<button onclick="toggleCtpHole(${mi},${currentHole},'${p.id}',${hasCtp?'false':'true'})"
-              style="display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;border:1.5px solid ${hasCtp?'#7A5900':'rgba(0,39,76,0.15)'};background:${hasCtp?'rgba(255,203,5,0.15)':'#fff'};cursor:pointer;font-size:12px;font-weight:bold;color:${hasCtp?'#7A5900':'var(--text-muted)'};">
-              ⛳ CTP${hasCtp?' ✓':''}
-            </button>`:''}
-          </div>
-        </div>
-        <input class="sc-input ${cls}" type="number" min="1" max="15" 
-          value="${raw!=null?raw:''}" placeholder="—"
-          onchange="updHoleIndAndRefresh(${mi},${currentHole},${pi},this.value,${par})"
-          style="width:56px;font-size:22px;text-align:center;font-weight:bold;flex-shrink:0;padding:8px 4px;">
-      </div>`;
+        </td>
+      </tr>
+      <tr style="border-bottom:2px solid rgba(0,39,76,0.1);">
+        <td style="padding:4px 0;background:#f7f8fa;" colspan="1">
+          <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+            <tr>${btns}
+              <td onclick="updHoleIndAndRefresh(${mi},${currentHole},${pi},'',${par})"
+                style="width:9%;text-align:center;padding:6px 0;cursor:pointer;background:#fafafa;border:1px solid rgba(0,39,76,0.08);">
+                <span style="font-size:13px;color:${raw!=null?'#C0392B':'rgba(0,39,76,0.15)'};">✕</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`;
     }).join('');
+
   } else {
-    // Team match
     const teams=[
       {label:mLabel(m,1),color:state.team1.color,key:'t1',hcp:avgHT(m.team1Players),pids:m.team1Players||[]},
       {label:mLabel(m,2),color:state.team2.color,key:'t2',hcp:avgHT(m.team2Players),pids:m.team2Players||[]}
     ];
     const st=strokesOn(hd,si,m.totalHoles);
-    const recv=st<0?0:st>0?1:-1;
-    scoreInputs=teams.map((t,ti)=>{
+
+    rows=teams.map((t,ti)=>{
       const raw=hd2[t.key];
-      const cls=getScoreCls(raw,par);
-      const gets=recv===ti;
+      const gets=ti===0?st<0:st>0;
       const yds=getHoleYards(m,currentHole,t.pids[0]);
       const teeName=getPlayerTeeName(m,t.pids[0]);
-      return`<div style="display:flex;align-items:center;gap:10px;padding:14px;border-bottom:1px solid rgba(0,39,76,0.07);">
-        <div style="width:38px;height:38px;border-radius:50%;background:${t.color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <span style="font-size:12px;font-weight:bold;color:#fff;">${t.label.split('/')[0].trim()[0]}</span>
-        </div>
-        <div style="flex:1;min-width:0;">
-          <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;">
-            <span style="font-size:15px;font-weight:bold;color:var(--blue);">${t.label}</span>
-            <span style="font-size:11px;color:var(--text-muted);">HCP ${t.hcp}</span>
-            ${gets?`<span style="font-size:11px;font-weight:bold;padding:2px 7px;border-radius:10px;background:rgba(0,39,76,0.1);color:var(--blue);">+1 stroke</span>`:''}
+      const cs=scoreCellStyle(raw,par);
+
+      const btns=[1,2,3,4,5,6,7,8,9,10].map(s=>{
+        const sel=raw===s;
+        const selC=scoreCellStyle(s,par);
+        return`<td onclick="updHoleAndRefresh(${mi},${currentHole},'${t.key}',${s},${par})"
+          style="width:9%;text-align:center;padding:5px 2px;cursor:pointer;${sel?'background:#f0f7f0;border:1px solid rgba(46,125,50,0.2);':'border:1px solid rgba(0,39,76,0.08);background:#fafafa;'}vertical-align:middle;">
+          ${sel?selC.innerHtml:`<span style="font-size:15px;font-weight:bold;color:rgba(0,39,76,0.35);">${s}</span>`}
+        </td>`;
+      }).join('');
+
+      const traw=raw;
+      const tnet=traw!=null?(ti===0?traw+st:traw):null; // st negative helps team1
+      return`<tr style="border-bottom:1px solid rgba(0,39,76,0.08);">
+        <td style="padding:10px 10px;background:#fff;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="position:relative;flex-shrink:0;">
+              <div style="width:32px;height:32px;border-radius:50%;background:${t.color};display:flex;align-items:center;justify-content:center;">
+                <span style="font-size:11px;font-weight:bold;color:#fff;">${t.label.split('/')[0].trim()[0]}</span>
+              </div>
+              ${gets?`<div style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:#FFCB05;border:2px solid #fff;display:flex;align-items:center;justify-content:center;"><span style="font-size:9px;font-weight:bold;color:#00274C;">+1</span></div>`:''}
+            </div>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:14px;font-weight:bold;color:var(--blue);">${t.label}</span>
+                <span style="font-size:10px;color:var(--text-muted);">HCP ${t.hcp}</span>
+                ${teeName?`<span style="font-size:10px;color:var(--text-dim);">${teeName}${yds?' · '+yds+'y':''}</span>`:''}
+              </div>
+              ${traw!=null?`<div style="font-size:11px;color:var(--text-muted);margin-top:1px;">Gross <b style="color:var(--blue);">${traw}</b> · Net <b style="color:${tnet<=par-1?'#1B5E20':tnet>par?'#C0392B':'var(--blue)'};">${tnet}</b> vs par ${par}</div>`:''}
+            </div>
           </div>
-          ${yds||teeName?`<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">${teeName||''}${teeName&&yds?' · ':''}${yds?yds+'y':''}</div>`:''}
-        </div>
-        <input class="sc-input ${cls}" type="number" min="1" max="15"
-          value="${raw!=null?raw:''}" placeholder="—"
-          onchange="updHoleAndRefresh(${mi},${currentHole},'${t.key}',this.value,${par})"
-          style="width:56px;font-size:22px;text-align:center;font-weight:bold;flex-shrink:0;padding:8px 4px;">
-      </div>`;
+        </td>
+      </tr>
+      <tr style="border-bottom:2px solid rgba(0,39,76,0.1);">
+        <td style="padding:4px 0;background:#f7f8fa;">
+          <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+            <tr>${btns}
+              <td onclick="updHoleAndRefresh(${mi},${currentHole},'${t.key}','',${par})"
+                style="width:9%;text-align:center;padding:6px 0;cursor:pointer;background:#fafafa;border:1px solid rgba(0,39,76,0.08);">
+                <span style="font-size:13px;color:${raw!=null?'#C0392B':'rgba(0,39,76,0.15)'};">✕</span>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`;
     }).join('');
   }
 
+  // Score legend
+  const legend=`<div style="display:flex;gap:10px;align-items:center;padding:8px 12px;background:#f7f8fa;border-top:1px solid rgba(0,39,76,0.06);flex-wrap:wrap;">
+    <span style="font-size:10px;color:var(--text-dim);font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;">Legend</span>
+    <span style="font-size:11px;color:#1B5E20;border:2px solid #2E7D32;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;">B</span><span style="font-size:10px;color:var(--text-muted);">Birdie</span>
+    <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:2px solid #1B5E20;"><span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:2px solid #1B5E20;background:#e8f5e9;font-size:9px;font-weight:bold;color:#1B5E20;">E</span></span><span style="font-size:10px;color:var(--text-muted);">Eagle</span>
+    <span style="font-size:11px;color:#C0392B;border:2px solid #C0392B;border-radius:3px;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;">B</span><span style="font-size:10px;color:var(--text-muted);">Bogey</span>
+    <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:4px;border:2px solid #C0392B;"><span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:2px;border:2px solid #8B0000;background:#fdecea;font-size:9px;font-weight:bold;color:#8B0000;">D</span></span><span style="font-size:10px;color:var(--text-muted);">Dbl+</span>
+  </div>`;
+
   const courseName=cd?cd.name:'';
-  const holeLabel=`Hole ${currentHole}`;
 
   modal=`<div class="modal" onclick="event.stopPropagation()" style="padding:0;overflow:hidden;">
     <!-- Top bar -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;border-bottom:2px solid var(--maize);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 10px;border-bottom:2px solid var(--maize);">
       <div>
-        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">${FORMATS[m.format]||m.format}${courseName?' · '+courseName:''}</div>
-        <div style="font-size:15px;font-weight:bold;color:var(--blue);margin-top:1px;">
+        <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">${FORMATS[m.format]||m.format}${courseName?' · '+courseName:''}</div>
+        <div style="font-size:14px;font-weight:bold;color:var(--blue);margin-top:1px;">
           ${isInd?(m.indPlayers||[]).map(id=>state.players.find(p=>p.id===id)?.name.split(' ')[0]).filter(Boolean).join(' · '):`${mLabel(m,1)} vs ${mLabel(m,2)}`}
         </div>
       </div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <!-- Hole header -->
-    <div style="background:var(--blue);padding:12px 16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div>
-          <div style="font-size:28px;font-weight:bold;color:#fff;line-height:1;">${holeLabel}</div>
-          <div style="display:flex;gap:12px;margin-top:4px;">
-            <span style="font-size:13px;color:var(--maize);font-weight:bold;">Par ${par}</span>
-            <span style="font-size:13px;color:rgba(255,255,255,0.6);">SI ${si}</span>
-            ${absHd>0?`<span style="font-size:11px;color:rgba(255,255,255,0.5);">${hd<0?mLabel(m,1):mLabel(m,2).split('/')[0]} +${Math.abs(strokesOn(hd,si,m.totalHoles))||''}</span>`:''}
-          </div>
+    <div style="background:var(--blue);padding:10px 14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="display:flex;align-items:baseline;gap:12px;">
+          <span style="font-size:26px;font-weight:bold;color:#fff;line-height:1;">Hole ${currentHole}</span>
+          <span style="font-size:14px;color:var(--maize);font-weight:bold;">Par ${par}</span>
+          <span style="font-size:12px;color:rgba(255,255,255,0.55);">SI ${si}</span>
+          ${absHd>0&&strokesOn(hd,si,m.totalHoles)!==0?`<span style="font-size:11px;color:rgba(255,255,255,0.5);">${hd<0?mLabel(m,1).split('/')[0]:mLabel(m,2).split('/')[0]} +${Math.abs(strokesOn(hd,si,m.totalHoles))}</span>`:''}
         </div>
         <div style="text-align:right;">
-          <div class="status-bubble ${sc}" style="background:rgba(255,255,255,0.15);color:#fff;font-size:16px;">${res.status}</div>
-          <div style="font-size:10px;color:rgba(255,255,255,0.5);margin-top:3px;">${holes.indexOf(currentHole)+1}/${holes.length}</div>
+          <div style="background:rgba(255,255,255,0.15);color:#fff;font-size:15px;font-weight:bold;padding:4px 10px;border-radius:20px;">${res.status}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.45);margin-top:2px;">${holeIdx+1}/${holes.length}</div>
         </div>
       </div>
-      <!-- Progress dots -->
-      <div style="display:flex;gap:4px;align-items:center;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;">${progressDots}</div>
+      <div style="display:flex;gap:3px;align-items:center;overflow-x:auto;scrollbar-width:none;">${progressDots}</div>
     </div>
-    <!-- Score inputs -->
-    <div style="background:#fff;">${scoreInputs}</div>
-    <!-- Prev / Next -->
-    <div style="display:flex;gap:8px;padding:12px 14px;border-top:1px solid rgba(0,39,76,0.08);background:#fff;">
-      <button class="btn btn-ghost" onclick="${prevHole?`openScorecard(${mi},${prevHole})`:'closeModal()'}" style="flex:1;">
-        ${prevHole?'← Prev':'Close'}
+    <!-- Score table -->
+    <div style="background:#fff;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">${rows}</table>
+    </div>
+    ${legend}
+    <!-- Nav -->
+    <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid rgba(0,39,76,0.08);background:#fff;">
+      <button class="btn btn-ghost" onclick="${prevHole?`openScorecard(${mi},${prevHole})`:'closeModal()'}" style="flex:${prevHole?'1':'0 0 auto'};min-width:${prevHole?'0':'120px'};">
+        ${prevHole?'← Prev':'💾 Save & Close'}
       </button>
-      <button class="btn btn-gold" onclick="${nextHole?`openScorecard(${mi},${nextHole})`:'closeModal()'}" style="flex:1;">
-        ${nextHole?'Next →':'Done ✓'}
-      </button>
+      ${nextHole?`<button class="btn btn-gold" onclick="openScorecard(${mi},${nextHole})" style="flex:2;">Next →</button>`
+      :`<button class="btn btn-gold" onclick="closeModal()" style="flex:2;">✓ Done</button>`}
     </div>
   </div>`;
   render();
@@ -1789,21 +1889,58 @@ function renderUnassigned(){const a=new Set([...(state.team1.players||[]),...(st
 function pRecord(pid){let w=0,l=0,h=0;state.matches.forEach(m=>{const i1=(m.team1Players||[]).includes(pid),i2=(m.team2Players||[]).includes(pid);if(!i1&&!i2)return;const r=mResult(m);if(r.winner==='team1'&&i1)w++;else if(r.winner==='team2'&&i2)w++;else if(r.winner==='half')h++;else if(r.winner)l++;});return{w,l,h};}
 function openPlayerModal(eid){if(!state.isHost)return;const p=eid?state.players.find(pl=>pl.id===eid):null;modal=`<div class="modal" onclick="event.stopPropagation()"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">${p?'Edit':'Add'} Player</div><button class="modal-close" onclick="closeModal()">\u2715</button></div><div class="form-group"><label class="form-label">Full Name</label><input type="text" id="p-name" value="${p?p.name:''}" placeholder="John Smith"></div><div class="form-group"><label class="form-label">Handicap Index</label><input type="number" id="p-hdcp" step="0.1" value="${p?p.handicap:10}" min="0" max="54"></div><button class="btn btn-gold w-full" onclick="savePlayer('${eid||''}')">${p?'Save':'Add Player'}</button></div>`;render();}
 function savePlayer(eid){const name=document.getElementById('p-name').value.trim(),handicap=parseFloat(document.getElementById('p-hdcp').value)||0;if(!name)return;mutate(()=>{if(eid){const i=state.players.findIndex(p=>p.id===eid);if(i>=0)state.players[i]={...state.players[i],name,handicap};}else state.players.push({id:'p'+Date.now(),name,handicap});});modal=null;render();}
+const TEAM_COLORS=[
+  {hex:'#E63946',name:'Red'},
+  {hex:'#FFCB05',name:'Yellow'},
+  {hex:'#2ECC40',name:'Green'},
+  {hex:'#FF851B',name:'Orange'},
+  {hex:'#B10DC9',name:'Purple'},
+  {hex:'#00B4D8',name:'Sky Blue'},
+  {hex:'#FF69B4',name:'Pink'},
+  {hex:'#01BFBF',name:'Teal'},
+];
+
 function openEditTeam(tn){
   if(!state.isHost)return;
   const t=getTeamByIdx(tn)||state.team1;
   const canDelete=tn>=3;
+  const curColor=t.color||TEAM_COLORS[0].hex;
   modal=`<div class="modal" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid var(--maize);padding-bottom:10px;">
       <div class="modal-title">Edit Team</div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="form-group"><label class="form-label">Team Name</label><input type="text" id="t-name" value="${t.name}"></div>
-    <div class="form-group"><label class="form-label">Color</label><input type="color" id="t-color" value="${t.color}" style="height:48px;padding:2px 4px;width:100%;border-radius:var(--radius);border:1.5px solid rgba(0,39,76,0.2);cursor:pointer;"></div>
+    <div class="form-group">
+      <label class="form-label">Color</label>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;">
+        ${TEAM_COLORS.map(c=>`
+          <div onclick="pickTeamColor('${c.hex}')" id="tc-${c.hex.replace('#','')}"
+            style="aspect-ratio:1;border-radius:10px;background:${c.hex};cursor:pointer;
+            border:3px solid ${curColor===c.hex?'var(--blue)':'transparent'};
+            box-shadow:${curColor===c.hex?'0 0 0 2px var(--blue)':'0 1px 3px rgba(0,0,0,0.15)'};
+            transition:all 0.15s;"
+            title="${c.name}">
+          </div>`).join('')}
+      </div>
+      <input type="hidden" id="t-color" value="${curColor}">
+    </div>
     <button class="btn btn-gold w-full" onclick="saveTeam(${tn})" style="margin-bottom:8px;">Save</button>
     ${canDelete?`<button class="btn btn-ghost w-full" onclick="deleteExtraTeam(${tn})" style="color:#C0392B;border-color:rgba(192,57,43,0.2);">Delete Team</button>`:''}
   </div>`;render();
 }
+
+function pickTeamColor(hex){
+  document.getElementById('t-color').value=hex;
+  TEAM_COLORS.forEach(c=>{
+    const el=document.getElementById('tc-'+c.hex.replace('#',''));
+    if(!el)return;
+    const sel=c.hex===hex;
+    el.style.border=sel?'3px solid var(--blue)':'3px solid transparent';
+    el.style.boxShadow=sel?'0 0 0 2px var(--blue)':'0 1px 3px rgba(0,0,0,0.15)';
+  });
+}
+
 function saveTeam(tn){
   const name=document.getElementById('t-name').value.trim(),color=document.getElementById('t-color').value;
   if(!name)return;
@@ -1814,7 +1951,7 @@ function saveTeam(tn){
   });modal=null;render();
 }
 function addExtraTeam(){
-  const colors=['#E65100','#6A1B9A','#00695C','#AD1457','#1565C0','#2E7D32'];
+  const colors=['#E63946','#2ECC40','#FF851B','#B10DC9','#00B4D8','#FF69B4','#01BFBF','#FFCB05'];
   const existing=(state.extraTeams||[]).length;
   mutate(()=>{
     if(!state.extraTeams)state.extraTeams=[];
