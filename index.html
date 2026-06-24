@@ -2253,7 +2253,7 @@ function renderBetting(){
       const count=playerBirdies(pid);
       const winnings=count*(pool.amount||0);
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
-        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</div>
+        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">🐦</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
@@ -2286,7 +2286,7 @@ function renderBetting(){
       const count=skinCounts[pid]||0;
       const winnings=count*(pool.amount||0);
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
-        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</div>
+        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">🏆</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
@@ -2314,7 +2314,7 @@ function renderBetting(){
       const count=playerPinnies(pid);
       const winnings=count*(pool.amount||0);
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
-        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</div>
+        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">🚩</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
@@ -2341,7 +2341,7 @@ function renderBetting(){
       const count=playerCTPs(pid);
       const winnings=count*(pool.amount||0);
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
-        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</div>
+        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">⛳</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
