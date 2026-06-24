@@ -241,9 +241,9 @@ async function pushToCloud(){
     try{
       console.log('[push] upserting code:',state.roomCode);
       // Try upsert by code column
-      const payload={code:state.roomCode,data:JSON.stringify(state),updated_at:new Date().toISOString()};
+      const payload={id:state.roomCode,code:state.roomCode,data:JSON.stringify(state),updated_at:new Date().toISOString()};
       console.log('[push] payload keys:',Object.keys(payload),'code:',payload.code);
-      const{data,error}=await sb.from('events').upsert(payload,{onConflict:'code'}).select();
+      const{data,error}=await sb.from('events').upsert(payload,{onConflict:'id'}).select();
       console.log('[push] result:',{data,error});
       syncStatus=error?'offline':'live';renderSyncBar();
     }catch(e){console.error('[push] exception:',e);syncStatus='offline';renderSyncBar();}
@@ -253,10 +253,10 @@ async function pushToCloud(){
 async function pullFromCloud(code){
   try{
     console.log('[pull] looking for code:',code.toUpperCase());
-    const{data,error}=await sb.from('events').select('data').eq('code',code.toUpperCase()).single();
+    const{data,error}=await sb.from('events').select('data').eq('code',code.toUpperCase()).maybeSingle();
     console.log('[pull] result:',{data,error});
     if(error){console.error('[pull] error code:',error.code,'msg:',error.message);return false;}
-    if(!data){console.error('[pull] no data returned');return false;}
+    if(!data){console.error('[pull] no row found for code:',code);return false;}
     const remote=JSON.parse(data.data);
     const{myName,isHost}=state;
     // Merge with defaults to handle missing fields from old events
@@ -517,7 +517,7 @@ async function createRoom(){
   const btn=document.querySelector('.btn-gold.btn-lg');
   if(btn){btn.textContent='Creating...';btn.disabled=true;}
   try{
-    const{data}=await sb.from('events').select('id').eq('code',customCode).single();
+    const{data}=await sb.from('events').select('id').eq('code',customCode).maybeSingle();
     if(data){if(errEl)errEl.textContent='That code is already taken. Try a different one.';if(btn){btn.textContent='Create New Event';btn.disabled=false;}return;}
   }catch(e){/* not found = available */}
   const newCode=customCode;
