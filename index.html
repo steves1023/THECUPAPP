@@ -201,6 +201,15 @@ function buildGenericHoles(n){
 }
 
 /* \u2550\u2550\u2550 STATE \u2550\u2550\u2550 */
+function defaultState(){return {
+    roomCode:null,eventName:'',eventPassword:'',isHost:false,myName:'',
+    team1:{name:'Eagles',color:'#E63946',players:[]},
+    team2:{name:'Falcons',color:'#00B4D8',players:[]},
+    extraTeams:[],
+    players:[],matches:[],bets:[],history:[],sessions:[],savedCourses:[],
+    pools:{pinnies:{active:false,amount:5,participants:[]},ctp:{active:false,amount:10,participants:[]},birdies:{active:false,amount:2,participants:[]},skins:{active:false,amount:5,participants:[]}},
+    settings:{holes:18,courseData:null}
+  };}
 let state={
   eventName:'The Cup',
   team1:{name:'Eagles',color:'#00274C',players:[]},
@@ -242,9 +251,19 @@ async function pullFromCloud(code){
     if(error||!data)return false;
     const remote=JSON.parse(data.data);
     const{myName,isHost}=state;
-    state={...remote,myName,isHost,roomCode:code.toUpperCase()};
+    // Merge with defaults to handle missing fields from old events
+    state={
+      ...defaultState(),
+      ...remote,
+      myName,isHost,
+      roomCode:code.toUpperCase(),
+      // Ensure new fields exist
+      extraTeams:remote.extraTeams||[],
+      sessions:remote.sessions||[],
+      pools:remote.pools||{pinnies:{active:false,amount:5,participants:[]},ctp:{active:false,amount:10,participants:[]},birdies:{active:false,amount:2,participants:[]},skins:{active:false,amount:5,participants:[]}},
+    };
     save();return true;
-  }catch(e){return false;}
+  }catch(e){console.error('pullFromCloud error:',e);return false;}
 }
 
 function subscribeToRoom(code){
@@ -294,7 +313,7 @@ function mpResult(m){
   }
   const left=m.totalHoles-played,abs=Math.abs(up);
   if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' DN'};}
+  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
   if(left===0)return{winner:'half',status:'AS',points:0.5};
   return{winner:null,status:'AS',points:0};
 }
@@ -331,7 +350,7 @@ function indResult(m){
   }
   const up=s1wins-s2wins, abs=Math.abs(up), left=m.totalHoles-played;
   if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' DN'};}
+  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
   if(left===0)return{winner:'half',status:'AS',points:0.5};
   return{winner:null,status:'AS',points:0};
 }
