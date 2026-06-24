@@ -468,9 +468,9 @@ function render(){
     <div class="topbar">
       <div class="topbar-inner">
         <img src="${LOGO_B64}" style="height:32px;width:32px;object-fit:contain;flex-shrink:0;" alt="">
-        <div class="event-name" onclick="${state.isHost?'editEventName()':''}"> ${state.eventName}</div>
+        <div class="event-name" onclick="editEventName()"> ${state.eventName}</div>
         <div style="display:flex;gap:6px;">
-          ${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openRoomModal()">Share</button><button class="btn btn-sm btn-ghost" onclick="openSettingsModal()">\u2699</button>`:''}
+          <button class="btn btn-sm btn-gold" onclick="openRoomModal()">Share</button><button class="btn btn-sm btn-ghost" onclick="openSettingsModal()">⚙</button>
           <button class="btn btn-sm btn-ghost" onclick="leaveRoom()" style="font-size:10px;">Leave</button>
         </div>
       </div>
@@ -491,15 +491,15 @@ function renderJoinScreen(){
       <img src="${LOGO_B64}" alt="The Cup" style="width:180px;height:180px;object-fit:contain;margin-bottom:8px;filter:drop-shadow(0 4px 20px rgba(0,0,0,0.4));">
       <div style="font-size:11px;color:rgba(255,255,255,0.75);font-family:Arial;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;">Ryder Cup Style · Scores · Gambling</div>
       <div style="width:100%;max-width:340px;">
-        <div class="form-group"><label class="form-label">Your Name</label>
-          <input type="text" id="j-name" placeholder="Enter your name" value="${state.myName||''}" style="font-size:15px;text-align:center;"></div>
         <div class="form-group"><label class="form-label">Event Name</label>
           <input type="text" id="j-event" placeholder="The Cup 2025" style="font-size:15px;text-align:center;"></div>
-        <div class="form-group"><label class="form-label">Room Code <span style="font-size:10px;font-weight:normal;text-transform:none;opacity:0.7;">(4–6 letters, shared with your group)</span></label>
+        <div class="form-group"><label class="form-label">Room Code <span style="font-size:10px;font-weight:normal;text-transform:none;opacity:0.7;">(unique code for your group)</span></label>
           <input type="text" id="j-newcode" class="code-input" placeholder="e.g. EAGLES" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-gold btn-lg w-full" onclick="createRoom()" style="margin-bottom:12px;">Create New Event</button>
         <div style="text-align:center;font-size:12px;color:var(--text-dim);font-family:Arial;margin:8px 0;">\u2014 or join an existing event \u2014</div>
-        <div class="form-group"><input type="text" id="j-code" class="code-input" placeholder="ENTER CODE" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
+        <div class="form-group"><label class="form-label" style="color:rgba(255,255,255,0.7);">Event Name</label>
+          <input type="text" id="j-join-event" placeholder="Event name" style="font-size:15px;text-align:center;"></div>
+        <div class="form-group"><input type="text" id="j-code" class="code-input" placeholder="ROOM CODE" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-ghost btn-lg w-full" onclick="joinRoom()">Join Event</button>
         <div id="join-error" style="color:#B71C1C;font-size:12px;font-family:Arial;text-align:center;margin-top:10px;min-height:20px;"></div>
       </div>
@@ -520,11 +520,10 @@ function renderTab(){
 
 /* \u2550\u2550\u2550 JOIN/CREATE \u2550\u2550\u2550 */
 async function createRoom(){
-  const name=(document.getElementById('j-name')||{}).value||'';
   const eventName=(document.getElementById('j-event')||{}).value||'The Cup';
   const customCode=((document.getElementById('j-newcode')||{}).value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   const errEl=document.getElementById('join-error');
-  if(!name.trim()){if(errEl)errEl.textContent='Please enter your name.';return;}
+  if(!eventName.trim()){if(errEl)errEl.textContent='Please enter an event name.';return;}
   if(customCode.length<2){if(errEl)errEl.textContent='Room code must be at least 2 characters.';return;}
   if(errEl)errEl.textContent='';
   // Check if code is already taken
@@ -542,25 +541,31 @@ async function createRoom(){
     team2:{name:'Falcons',color:'#FFCB05',players:[]},
     players:[],matches:[],bets:[],history:[],sessions:[],savedCourses:[],extraTeams:[],pools:{pinnies:{active:false,amount:5,participants:[]},ctp:{active:false,amount:10,participants:[]},birdies:{active:false,amount:2,participants:[]},skins:{active:false,amount:5,participants:[]}},
     settings:{holes:18,courseData:null},
-    apiKey:'WBDTXEE7RFRB6N3GDTE2T76D34',roomCode:newCode,isHost:true,myName:name.trim(),
+    apiKey:'WBDTXEE7RFRB6N3GDTE2T76D34',roomCode:newCode,isHost:true,myName:'Host',
     eventPassword:'',_completedOpen:false
   };
   save();
   await pushToCloud();subscribeToRoom(newCode);render();
 }
 async function joinRoom(){
-  const name=(document.getElementById('j-name')||{}).value||'';
+  const joinEventName=((document.getElementById('j-join-event')||{}).value||'').trim();
   const rawCode=(document.getElementById('j-code')||{}).value||'';
   const code=rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   const errEl=document.getElementById('join-error');
-  if(!name.trim()){if(errEl)errEl.textContent='Please enter your name.';return;}
-  if(code.length<2){if(errEl)errEl.textContent='Please enter a room code.';return;}
+  if(!joinEventName){if(errEl)errEl.textContent='Please enter the event name.';return;}
+  if(code.length<2){if(errEl)errEl.textContent='Please enter the room code.';return;}
   if(errEl)errEl.textContent='';
   const btn=document.querySelector('.btn-ghost.btn-lg');
   if(btn){btn.textContent='Joining...';btn.disabled=true;}
-  state.myName=name.trim();state.isHost=false;
-  const ok=await pullFromCloud(code.trim().toUpperCase());
+  state.isHost=false;state.myName='Guest';
+  const ok=await pullFromCloud(code);
   if(!ok){if(errEl)errEl.textContent='Room not found. Check the code.';if(btn){btn.textContent='Join Event';btn.disabled=false;}return;}
+  // Verify event name matches (case-insensitive)
+  if(state.eventName.trim().toLowerCase()!==joinEventName.toLowerCase()){
+    if(errEl)errEl.textContent='Event name does not match. Check with the host.';
+    if(btn){btn.textContent='Join Event';btn.disabled=false;}
+    state={...defaultState()};save();return;
+  }
   save();subscribeToRoom(state.roomCode);render();
 }
 function leaveRoom(){
@@ -643,8 +648,8 @@ const SESSION_FORMATS=['fourball','foursomes','singles','scramble2','scramble4',
 
 function renderSessions(){
   const sessions=state.sessions||[];
-  return`<div class="section-header"><span class="section-title">Sessions</span>${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openSessionModal(null)">+ Session</button>`:''}</div>`
-    +(sessions.length===0?`<div class="empty-state">No sessions yet.${state.isHost?' Tap + Session to create one.':''}</div>`
+  return`<div class="section-header"><span class="section-title">Sessions</span><button class="btn btn-sm btn-gold" onclick="openSessionModal(null)">+ Session</button></div>`
+    +(sessions.length===0?`<div class="empty-state">No sessions yet. Tap + Session to create one.</div>`
     :sessions.map((s,si)=>renderSessionCard(s,si)).join(''));
 }
 
@@ -942,8 +947,8 @@ function renderScoreboard(){
     </div>
   </div>
 
-  <div class="section-header"><span class="section-title">Live Matches</span>${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button>`:''}</div>
-  ${state.matches.length===0?`<div class="empty-state">No matches yet.${state.isHost?' Tap + Match to begin.':''}</div>`:''}
+  <div class="section-header"><span class="section-title">Live Matches</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>
+  ${state.matches.length===0?`<div class="empty-state">No matches yet. Tap + Match to begin.</div>`:''}
   ${renderGroupedMatches()}`;
 }
 
@@ -980,7 +985,7 @@ function renderMatchCard(m,i){
       </div>
       <div style="display:flex;gap:4px;">
         ${canScore?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${i})">✏️ Scores</button>`:''}
-        ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openMatchModal(${i})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${i})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="openMatchModal(${i})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${i})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>
       </div>
     </div>
     <div class="match-body">
@@ -1029,7 +1034,7 @@ function renderMatchCard(m,i){
 }
 function mLabel(m,tn){const ids=tn===1?m.team1Players:m.team2Players;if(!ids||!ids.length)return tn===1?state.team1.name:state.team2.name;return ids.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name.split(' ')[0]:'?';}).join(' / ');}
 function renderMatches(){
-  return`<div class="section-header"><span class="section-title">All Matches</span>${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ New Match</button>`:''}</div>`
+  return`<div class="section-header"><span class="section-title">All Matches</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ New Match</button></div>`
     +(state.matches.length===0?`<div class="empty-state">No matches yet.</div>`:'')
     +renderGroupedMatches();
 }
@@ -1592,7 +1597,6 @@ function updHole(mi,h,t,v,par){
 
 /* \u2550\u2550\u2550 MATCH MODAL \u2550\u2550\u2550 */
 function openMatchModal(idx){
-  if(!state.isHost)return;
   if(idx!=null){const m=state.matches[idx];matchDraft={editIdx:idx,format:m.format,totalHoles:m.totalHoles,hdcpPercent:m.hdcpPercent!=null?m.hdcpPercent:100,matchType:m.matchType||'teams',indPlayers:[...(m.indPlayers||[])],indPlayerSides:{...(m.indPlayerSides||{})},linkedTeamMatch:false,team1Players:[...(m.team1Players||[])],team2Players:[...(m.team2Players||[])],notes:m.notes||'',courseData:m.courseData||null,selectedTee:m.selectedTee||0,playerTees:{...(m.playerTees||{})}};}
   else matchDraft={editIdx:null,format:'fourball',totalHoles:state.settings.holes||18,hdcpPercent:100,matchType:'teams',indPlayers:[],indPlayerSides:{},linkedTeamMatch:false,team1Players:[],team2Players:[],notes:'',courseData:state.settings.courseData||null,selectedTee:0,playerTees:{}};
   renderMatchModal();
@@ -1928,14 +1932,14 @@ function renderTeams(){
   const teams=allTeams();
   const cols=teams.length<=2?'1fr 1fr':teams.length===3?'1fr 1fr 1fr':'1fr 1fr';
   return`<div class="section-header"><span class="section-title">Roster</span>
-    <div style="display:flex;gap:6px;">${state.isHost?`<button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="openAutoTeams()">Auto</button><button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="addExtraTeam()">+ Team</button><button class="btn btn-sm btn-gold" onclick="openPlayerModal(null)">+ Player</button>`:''}</div>
+    <div style="display:flex;gap:6px;"><button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="openAutoTeams()">Auto</button><button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="addExtraTeam()">+ Team</button><button class="btn btn-sm btn-gold" onclick="openPlayerModal(null)">+ Player</button></div>
   </div>
   <div style="display:grid;grid-template-columns:${cols};gap:10px;padding:0 12px;margin-bottom:12px;">
     ${teams.map(t=>`<div class="team-card" style="border:2px solid ${t.color}44;">
       <div style="height:3px;border-radius:2px;background:${t.color};margin-bottom:8px;"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <div style="font-size:13px;font-weight:bold;color:${t.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${t.name}</div>
-        ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openEditTeam(${t.idx})" style="flex-shrink:0;font-size:10px;padding:3px 8px;margin-left:4px;">Edit</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="openEditTeam(${t.idx})" style="flex-shrink:0;font-size:10px;padding:3px 8px;margin-left:4px;">Edit</button>
       </div>
       <div style="font-size:26px;font-weight:bold;color:var(--blue);text-align:center;padding:2px 0;">${teamPts(t.idx)}</div>
       <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-bottom:4px;">pts</div>
@@ -1978,7 +1982,6 @@ const TEAM_COLORS=[
 ];
 
 function openEditTeam(tn){
-  if(!state.isHost)return;
   const t=getTeamByIdx(tn)||state.team1;
   const canDelete=tn>=3;
   const curColor=t.color||TEAM_COLORS[0].hex;
@@ -2373,7 +2376,7 @@ function renderBetting(){
   return`<div class="section-header">
     <span class="section-title">Betting</span>
     <div style="display:flex;gap:6px;">
-      ${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openPoolSettings()">⚙️ Pools</button><button class="btn btn-sm btn-ghost" onclick="openAddBet()" style="color:#fff;border-color:rgba(255,255,255,0.3);">+ Bet</button>`:''}
+      <button class="btn btn-sm btn-gold" onclick="openPoolSettings()">⚙️ Pools</button><button class="btn btn-sm btn-ghost" onclick="openAddBet()" style="color:#fff;border-color:rgba(255,255,255,0.3);">+ Bet</button>
     </div>
   </div>
   <div style="padding:8px 12px;">
@@ -2381,7 +2384,7 @@ function renderBetting(){
       <div style="font-size:32px;margin-bottom:8px;">💰</div>
       <div style="font-size:15px;font-weight:bold;color:var(--blue);margin-bottom:6px;">No pools active</div>
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Tap ⚙️ Pools to set up Birdies, Skins, Pinnies & CTP</div>
-      ${state.isHost?`<button class="btn btn-gold" onclick="openPoolSettings()">⚙️ Set Up Pools</button>`:''}
+      <button class="btn btn-gold" onclick="openPoolSettings()">⚙️ Set Up Pools</button>
     </div>`:(poolSections+betsHTML)}
   </div>`;
 }
