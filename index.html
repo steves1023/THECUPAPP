@@ -680,7 +680,7 @@ function renderSessionCard(s,si){
         return`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;${gi>0?'border-top:1px solid rgba(0,39,76,0.06)':''};">
           <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></div>
           <div style="flex:1;">
-            <div style="font-size:13px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name.split(' ')[0]).join(' + ')}</div>
+            <div style="font-size:13px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name).join(' + ')}</div>
             <div style="font-size:10px;color:var(--text-muted);">HCP ${(players.reduce((a,p)=>a+(p.handicap||0),0)/Math.max(1,players.length)).toFixed(1)}</div>
           </div>
           ${(()=>{let tot=0,n=0;for(let h=1;h<=(s.totalHoles||18);h++){const sc=(s.holes||{})[h];if(sc&&sc['g'+gi]!=null){tot+=sc['g'+gi];n++;}}return n>0?`<div style="font-size:20px;font-weight:bold;color:var(--blue);">${tot}</div>`:`<div style="font-size:13px;color:var(--text-dim);">—</div>`;})()}
@@ -730,14 +730,14 @@ function renderSessionModal(){
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
         ${players.map(p=>`<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:#fff;border:1px solid rgba(0,39,76,0.15);border-radius:20px;">
-          <span style="font-size:12px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+          <span style="font-size:12px;font-weight:bold;color:var(--blue);">${p.name}</span>
           <span style="font-size:10px;color:var(--text-muted);">HCP${p.handicap}</span>
           <button onclick="removeFromGroup(${gi},'${p.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;padding:0;margin-left:2px;">✕</button>
         </div>`).join('')}
       </div>
       ${players.length<playersPerGroup&&availPlayers.length>0?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Add player to group:</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;">
-        ${availPlayers.map(p=>`<button onclick="addToGroup(${gi},'${p.id}')" style="padding:4px 10px;border-radius:20px;border:1px dashed rgba(0,39,76,0.2);background:#fff;cursor:pointer;font-size:11px;color:var(--blue);">+ ${p.name.split(' ')[0]}</button>`).join('')}
+        ${availPlayers.map(p=>`<button onclick="addToGroup(${gi},'${p.id}')" style="padding:4px 10px;border-radius:20px;border:1px dashed rgba(0,39,76,0.2);background:#fff;cursor:pointer;font-size:11px;color:var(--blue);">+ ${p.name}</button>`).join('')}
       </div>`:''}
     </div>`;
   }).join('');
@@ -859,7 +859,7 @@ function openSessionScorecard(si,startHole){
         <span style="font-size:12px;font-weight:bold;color:#fff;">${gi+1}</span>
       </div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name.split(' ')[0]).join(' + ')}</div>
+        <div style="font-size:14px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name).join(' + ')}</div>
         <div style="font-size:11px;color:var(--text-muted);">Avg HCP ${avgHcp}${yds?' · '+yds+'y':''}</div>
       </div>
       <input class="sc-input ${cls}" type="number" min="1" max="15"
@@ -996,8 +996,8 @@ function renderMatchCard(m,i){
           // Group by side
           const s1=pids.filter(id=>sides[id]!=='2');
           const s2=pids.filter(id=>sides[id]==='2');
-          const s1label=s1.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name.split(' ')[0]:'?';}).join(' / ')||state.team1.name;
-          const s2label=s2.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name.split(' ')[0]:'?';}).join(' / ')||state.team2.name;
+          const s1label=s1.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name:'?';}).join(' / ')||state.team1.name;
+          const s2label=s2.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name:'?';}).join(' / ')||state.team2.name;
           // Count played holes for individual
           const indPlayed=Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];return d&&pids.some((_,pi)=>d['p'+pids.indexOf(_)]!=null);}).length;
           return`<div class="match-player-row">
@@ -1032,7 +1032,7 @@ function renderMatchCard(m,i){
     <div class="hole-progress">${dots}</div>
   </div>`;
 }
-function mLabel(m,tn){const ids=tn===1?m.team1Players:m.team2Players;if(!ids||!ids.length)return tn===1?state.team1.name:state.team2.name;return ids.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name.split(' ')[0]:'?';}).join(' / ');}
+function mLabel(m,tn){const ids=tn===1?m.team1Players:m.team2Players;if(!ids||!ids.length)return tn===1?state.team1.name:state.team2.name;return ids.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name:'?';}).join(' / ');}
 function renderMatches(){
   return`<div class="section-header"><span class="section-title">All Matches</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ New Match</button></div>`
     +(state.matches.length===0?`<div class="empty-state">No matches yet.</div>`:'')
@@ -1147,7 +1147,7 @@ function renderGroupCard(parent,pi,children){
         let row=`<td style="background:#fff;padding:4px 5px;white-space:nowrap;border-right:2px solid rgba(0,39,76,0.08);">
           <div style="display:flex;align-items:center;gap:4px;">
             <span style="width:8px;height:8px;border-radius:50%;background:${tc};display:inline-block;flex-shrink:0;"></span>
-            <span style="font-size:11px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+            <span style="font-size:11px;font-weight:bold;color:var(--blue);">${p.name}</span>
             <span style="font-size:9px;color:var(--text-muted);">HCP${p.handicap}${diffs[pi]>0?' +'+diffs[pi]:''}</span>
           </div>
         </td>`;
@@ -1371,7 +1371,7 @@ function openScorecard(mi,startHole){
             </div>
             <div style="flex:1;">
               <div style="display:flex;align-items:center;gap:6px;">
-                <span style="font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+                <span style="font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</span>
                 <span style="font-size:10px;color:var(--text-muted);">HCP${p.handicap}</span>
                 ${yds?`<span style="font-size:10px;color:var(--text-dim);">${yds}y</span>`:''}
               </div>
@@ -1481,7 +1481,7 @@ function openScorecard(mi,startHole){
       <div>
         <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">${FORMATS[m.format]||m.format}${courseName?' · '+courseName:''}</div>
         <div style="font-size:14px;font-weight:bold;color:var(--blue);margin-top:1px;">
-          ${isInd?(m.indPlayers||[]).map(id=>state.players.find(p=>p.id===id)?.name.split(' ')[0]).filter(Boolean).join(' · '):`${mLabel(m,1)} vs ${mLabel(m,2)}`}
+          ${isInd?(m.indPlayers||[]).map(id=>state.players.find(p=>p.id===id)?.name).filter(Boolean).join(' · '):`${mLabel(m,1)} vs ${mLabel(m,2)}`}
         </div>
       </div>
       <button class="modal-close" onclick="closeModal()">✕</button>
@@ -1625,7 +1625,7 @@ function renderMatchModal(){
         <div style="display:flex;align-items:center;gap:7px;width:90px;flex-shrink:0;">
           <span style="width:9px;height:9px;border-radius:50%;background:${ac};flex-shrink:0;"></span>
           <div>
-            <div style="font-size:13px;font-weight:bold;color:var(--blue);line-height:1.2;">${p.name.split(' ')[0]}</div>
+            <div style="font-size:13px;font-weight:bold;color:var(--blue);line-height:1.2;">${p.name}</div>
             <div style="font-size:10px;color:var(--text-muted);">HCP ${p.handicap}</div>
           </div>
         </div>
@@ -1637,7 +1637,7 @@ function renderMatchModal(){
   })():'';
   const fmtDesc=FORMAT_DESC[d.format]||'';
   // Player pickers
-  function chips(ids,color){if(!ids.length)return`<span style="font-size:11px;color:var(--text-dim);font-family:Arial;">None</span>`;return ids.map(id=>{const p=allPlayers.find(pl=>pl.id===id);return p?`<span class="selected-chip" style="background:${color}22;color:${color};border:1px solid ${color}44;">${p.name.split(' ')[0]}</span>`:''}).join('');}
+  function chips(ids,color){if(!ids.length)return`<span style="font-size:11px;color:var(--text-dim);font-family:Arial;">None</span>`;return ids.map(id=>{const p=allPlayers.find(pl=>pl.id===id);return p?`<span class="selected-chip" style="background:${color}22;color:${color};border:1px solid ${color}44;">${p.name}</span>`:''}).join('');}
   function playerPicker(ids,color,name,side){
     if(!ids.length)return'';
     return`<div class="team-section-label" style="color:${color};">${name}</div>`+ids.map(p=>{const sel=d[side+'Players']&&d[side+'Players'].includes(p.id);const ac=AVC[allPlayers.findIndex(pl=>pl.id===p.id)%AVC.length];const init=p.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
@@ -2157,7 +2157,7 @@ function openPoolSettings(){
             border:2px solid ${isIn?'var(--blue)':'rgba(0,39,76,0.15)'};
             background:${isIn?'var(--blue)':'#fff'};
             color:${isIn?'#fff':'var(--text-muted)'};">
-            ${p.name.split(' ')[0]}
+            ${p.name}
           </div>`;
         }).join('')}
       </div>`:''}
