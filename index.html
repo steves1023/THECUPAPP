@@ -239,7 +239,7 @@ async function pushToCloud(){
   clearTimeout(pushTimeout);
   pushTimeout=setTimeout(async()=>{
     try{
-      const{error}=await sb.from('events').upsert({id:state.roomCode,code:state.roomCode,data:JSON.stringify(state),updated_at:new Date().toISOString()},{onConflict:'code'});
+      const{error}=await sb.from('events').upsert({code:state.roomCode,data:JSON.stringify(state),updated_at:new Date().toISOString()},{onConflict:'code'});
       syncStatus=error?'offline':'live';renderSyncBar();
     }catch(e){syncStatus='offline';renderSyncBar();}
   },400);
@@ -263,7 +263,7 @@ async function pullFromCloud(code){
       pools:remote.pools||{pinnies:{active:false,amount:5,participants:[]},ctp:{active:false,amount:10,participants:[]},birdies:{active:false,amount:2,participants:[]},skins:{active:false,amount:5,participants:[]}},
     };
     save();return true;
-  }catch(e){console.error('pullFromCloud error:',e);return false;}
+  }catch(e){console.error('pullFromCloud error:',e.message||e);return false;}
 }
 
 function subscribeToRoom(code){
@@ -474,10 +474,10 @@ function renderJoinScreen(){
         <div class="form-group"><label class="form-label">Event Name</label>
           <input type="text" id="j-event" placeholder="The Cup 2025" style="font-size:15px;text-align:center;"></div>
         <div class="form-group"><label class="form-label">Room Code <span style="font-size:10px;font-weight:normal;text-transform:none;opacity:0.7;">(4–6 letters, shared with your group)</span></label>
-          <input type="text" id="j-newcode" class="code-input" placeholder="e.g. EAGLES" maxlength="6" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
+          <input type="text" id="j-newcode" class="code-input" placeholder="e.g. EAGLES" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-gold btn-lg w-full" onclick="createRoom()" style="margin-bottom:12px;">Create New Event</button>
         <div style="text-align:center;font-size:12px;color:var(--text-dim);font-family:Arial;margin:8px 0;">\u2014 or join an existing event \u2014</div>
-        <div class="form-group"><input type="text" id="j-code" class="code-input" placeholder="ENTER CODE" maxlength="6" oninput="this.value=this.value.toUpperCase()"></div>
+        <div class="form-group"><input type="text" id="j-code" class="code-input" placeholder="ENTER CODE" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-ghost btn-lg w-full" onclick="joinRoom()">Join Event</button>
         <div id="join-error" style="color:#B71C1C;font-size:12px;font-family:Arial;text-align:center;margin-top:10px;min-height:20px;"></div>
       </div>
@@ -503,7 +503,7 @@ async function createRoom(){
   const customCode=((document.getElementById('j-newcode')||{}).value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   const errEl=document.getElementById('join-error');
   if(!name.trim()){if(errEl)errEl.textContent='Please enter your name.';return;}
-  if(customCode.length<4){if(errEl)errEl.textContent='Room code must be at least 4 characters.';return;}
+  if(customCode.length<2){if(errEl)errEl.textContent='Room code must be at least 2 characters.';return;}
   if(errEl)errEl.textContent='';
   // Check if code is already taken
   const btn=document.querySelector('.btn-gold.btn-lg');
@@ -528,10 +528,11 @@ async function createRoom(){
 }
 async function joinRoom(){
   const name=(document.getElementById('j-name')||{}).value||'';
-  const code=(document.getElementById('j-code')||{}).value||'';
+  const rawCode=(document.getElementById('j-code')||{}).value||'';
+  const code=rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   const errEl=document.getElementById('join-error');
   if(!name.trim()){if(errEl)errEl.textContent='Please enter your name.';return;}
-  if(code.length<4){if(errEl)errEl.textContent='Please enter a room code.';return;}
+  if(code.length<2){if(errEl)errEl.textContent='Please enter a room code.';return;}
   if(errEl)errEl.textContent='';
   const btn=document.querySelector('.btn-ghost.btn-lg');
   if(btn){btn.textContent='Joining...';btn.disabled=true;}
