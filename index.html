@@ -279,12 +279,26 @@ function subscribeToRoom(code){
   realtimeSub=sb.channel('room:'+code)
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'events',filter:'code=eq.'+code},payload=>{
       if(!payload.new?.data)return;
-      const remote=JSON.parse(payload.new.data);
-      const{myName,isHost,roomCode}=state;
-      state={...remote,myName,isHost,roomCode};
-      save();syncStatus='live';render();
+      try{
+        const remote=JSON.parse(payload.new.data);
+        const{myName,isHost,roomCode}=state;
+        state={
+          ...defaultState(),
+          ...remote,
+          myName,isHost,roomCode,
+          extraTeams:remote.extraTeams||[],
+          sessions:remote.sessions||[],
+          pools:remote.pools||defaultState().pools,
+        };
+        save();syncStatus='live';render();
+      }catch(e){console.error('realtime parse error:',e);}
     })
-    .subscribe(s=>{syncStatus=s==='SUBSCRIBED'?'live':'connecting';renderSyncBar();});
+    .subscribe(s=>{
+      syncStatus=s==='SUBSCRIBED'?'live':'connecting';
+      renderSyncBar();
+      // On reconnect, pull fresh state
+      if(s==='SUBSCRIBED') pullFromCloud(code).then(ok=>{if(ok){save();render();}});
+    });
 }
 
 function renderSyncBar(){
@@ -956,7 +970,7 @@ function renderMatchCard(m,i){
   }
   const cn=m.courseData?m.courseData.name:(state.settings.courseData?state.settings.courseData.name:'');
   const myPid=state.players.find(p=>p.name===state.myName)?.id;
-  const canScore=state.isHost||((m.team1Players||[]).includes(myPid))||((m.team2Players||[]).includes(myPid))||((m.indPlayers||[]).includes(myPid));
+  const canScore=true; // All participants can enter scores
   return`<div class="match-card">
     <div class="match-card-header">
       <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
@@ -1069,14 +1083,14 @@ function renderGroupCard(parent,pi,children){
   const pSc=pRes.winner==='team1'?'status-t1':pRes.winner==='team2'?'status-t2':'status-as';
   let pt1t=0,pt2t=0;
   for(let h=1;h<=parent.totalHoles;h++){const d=(parent.holes||{})[h];if(d&&d.t1!=null)pt1t+=d.t1;if(d&&d.t2!=null)pt2t+=d.t2;}
-  const canScoreParent=state.isHost||((parent.team1Players||[]).includes(myPid))||((parent.team2Players||[]).includes(myPid));
+  const canScoreParent=true;
 
   // Individual match rows
   const childRows=children.map(({m:cm,i:ci})=>{
     const cPids=cm.indPlayers||[];
     const cPlayers=cPids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
     if(!cPlayers.length) return '';
-    const canScoreChild=state.isHost||(cPids.includes(myPid));
+    const canScoreChild=true;
     const minH=Math.min(...cPlayers.map(pl=>pl.handicap||0));
     const diffs=cPlayers.map(pl=>Math.round(((pl.handicap||0)-minH)*(cm.hdcpPercent||100)/100));
     const holes=matchHoles(cm);
