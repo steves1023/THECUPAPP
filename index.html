@@ -239,16 +239,24 @@ async function pushToCloud(){
   clearTimeout(pushTimeout);
   pushTimeout=setTimeout(async()=>{
     try{
-      const{error}=await sb.from('events').upsert({code:state.roomCode,data:JSON.stringify(state),updated_at:new Date().toISOString()},{onConflict:'code'});
+      console.log('[push] upserting code:',state.roomCode);
+      // Try upsert by code column
+      const payload={code:state.roomCode,data:JSON.stringify(state),updated_at:new Date().toISOString()};
+      console.log('[push] payload keys:',Object.keys(payload),'code:',payload.code);
+      const{data,error}=await sb.from('events').upsert(payload,{onConflict:'code'}).select();
+      console.log('[push] result:',{data,error});
       syncStatus=error?'offline':'live';renderSyncBar();
-    }catch(e){syncStatus='offline';renderSyncBar();}
+    }catch(e){console.error('[push] exception:',e);syncStatus='offline';renderSyncBar();}
   },400);
 }
 
 async function pullFromCloud(code){
   try{
+    console.log('[pull] looking for code:',code.toUpperCase());
     const{data,error}=await sb.from('events').select('data').eq('code',code.toUpperCase()).single();
-    if(error||!data)return false;
+    console.log('[pull] result:',{data,error});
+    if(error){console.error('[pull] error code:',error.code,'msg:',error.message);return false;}
+    if(!data){console.error('[pull] no data returned');return false;}
     const remote=JSON.parse(data.data);
     const{myName,isHost}=state;
     // Merge with defaults to handle missing fields from old events
