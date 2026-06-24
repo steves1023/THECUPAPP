@@ -2202,7 +2202,7 @@ function calcSettlement(parts,getCount,amountPerWin){
     const p=state.players.find(pl=>pl.id===pid);
     const earned=counts[pid]*amountPerWin;
     const net=earned-shareEach;
-    return{pid,name:p?p.name.split(' ')[0]:'?',count:counts[pid],earned,shareEach,net};
+    return{pid,name:p?p.name:'?',count:counts[pid],earned,shareEach,net};
   }).sort((a,b)=>b.net-a.net);
 }
 
