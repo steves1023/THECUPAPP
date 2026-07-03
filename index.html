@@ -2490,14 +2490,14 @@ function renderBetting(){
     const rows=parts.map(pid=>{
       const p=state.players.find(pl=>pl.id===pid);if(!p)return'';
       const count=playerCTPs(pid);
-      const net=netByPid[pid]||0;
+      const earned=netByPid[pid]>0?netByPid[pid]:0;
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
         <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">⛳</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
         </div>
-        <div style="font-size:15px;font-weight:bold;color:${net>0?'#1B5E20':net<0?'#C0392B':'var(--text-muted)'};">${net>0?'+$'+net.toFixed(0):net<0?'-$'+Math.abs(net).toFixed(0):'$0'}</div>
+        <div style="font-size:15px;font-weight:bold;color:${earned>0?'#1B5E20':'var(--text-muted)'};">${earned>0?'+$'+earned.toFixed(0):'$0'}</div>
       </div>`;
     }).join('');
 
