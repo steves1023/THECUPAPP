@@ -1319,6 +1319,11 @@ function scoreCellStyle(score, par){
 
 function openScorecard(mi,startHole){
   const m=state.matches[mi];
+  // Auto reroll all holes to team match when opening individual scorecard
+  if(m&&m.linkedFrom){
+    const holes=matchHoles(m);
+    holes.forEach(h=>rollUpToTeamMatch(mi,h));
+  }
   const isInd=m.matchType==='individual';
   const cd=m.courseData||state.settings.courseData;
   const holes=matchHoles(m);
@@ -1571,6 +1576,10 @@ function updHoleAndRefresh(mi,h,key,v,par){
 function updHoleIndAndRefresh(mi,h,pi,v,par){
   updHoleInd(mi,h,pi,'sc-'+mi+'-'+h+'-'+pi,v,par);
   setTimeout(()=>openScorecard(mi,h),50);
+}
+function rerollFromScorecard(mi){
+  // Re-roll all holes from individual → team match, then re-render
+  rerollAllHoles(mi);
 }
 function togglePinnieHole(mi,h,pid,add){
   const m=state.matches[mi];
@@ -2639,6 +2648,15 @@ function rollUpToTeamMatch(indMatchIdx, h){
   if(t2net!==null) team.holes[h].t2=t2net;
   else delete team.holes[h].t2;
 }
+
+function rerollAllHoles(indMatchIdx){
+  const m=state.matches[indMatchIdx];
+  if(!m) return;
+  const holes=matchHoles(m);
+  holes.forEach(h=>rollUpToTeamMatch(indMatchIdx,h));
+  save();pushToCloud();render();
+}
+
 
 function togglePinnie(mi,h,pid,add,btn){
   const m=state.matches[mi];
