@@ -2266,17 +2266,22 @@ function savePools(){
 }
 
 function calcSettlement(parts,getCount,amountPerWin){
-  // Filter to only participants who exist in current player list
+  // Each win = collect $amount from EVERY other participant
+  // Net per player = (wins × amount × (n-1)) - (losses_to_others × amount)
+  // Where losses_to_others = sum of other players' wins × amount
   const validParts=parts.filter(pid=>state.players.find(pl=>pl.id===pid));
   if(!validParts.length) return[];
+  const n=validParts.length;
   const counts={};validParts.forEach(pid=>counts[pid]=getCount(pid));
-  const totalWinnings=validParts.reduce((s,pid)=>s+counts[pid]*amountPerWin,0);
-  const shareEach=validParts.length?totalWinnings/validParts.length:0;
   return validParts.map(pid=>{
     const p=state.players.find(pl=>pl.id===pid);
-    const earned=counts[pid]*amountPerWin;
-    const net=earned-shareEach;
-    return{pid,name:p?p.name:'?',count:counts[pid],earned,shareEach,net};
+    const myWins=counts[pid];
+    // Earn $amount from each other player for each of my wins
+    const earned=myWins*(n-1)*amountPerWin;
+    // Pay $amount to each other player for each of their wins
+    const paid=validParts.filter(other=>other!==pid).reduce((s,other)=>s+counts[other]*amountPerWin,0);
+    const net=earned-paid;
+    return{pid,name:p?p.name:'?',count:myWins,earned,paid,net};
   }).sort((a,b)=>b.net-a.net);
 }
 
