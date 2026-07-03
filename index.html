@@ -662,33 +662,38 @@ function playerCTPs(pid){
 }
 
 function ctpResults(amountPerPlayer){
-  // Process all par 3s in hole order across all matches
-  // Track carryover multiplier — each unclaimed par 3 adds 1 to the multiplier
-  // When a CTP is awarded, winner collects amount*multiplier from each other player
-  // then multiplier resets to 1
-  const events=[]; // {hole, ctp:pid, multiplier}
-  let carryover=1;
-
+  // Deduplicate par 3 holes across all matches — same hole # should only be counted once
+  // Prefer: individual match > team match, CTP data takes priority
+  const par3Map={}; // hole# -> {ctp, hasScore}
   state.matches.forEach(m=>{
     const cd=m.courseData||state.settings.courseData;
     const totalHoles=m.totalHoles||18;
     for(let h=1;h<=totalHoles;h++){
       const hd=(m.holes||{})[h];if(!hd)continue;
       const ch=cd&&cd.holes&&cd.holes[h-1];
-      const par=ch?ch.par:null;
-      if(par!==3) continue;
+      if((ch?ch.par:null)!==3) continue;
       const hasScore=Object.keys(hd).some(k=>k.startsWith('p')&&hd[k]!=null)||hd.t1!=null||hd.t2!=null;
       if(!hasScore) continue;
-      if(hd.ctp){
-        events.push({hole:h,ctp:hd.ctp,multiplier:carryover});
-        carryover=1; // reset after award
-      } else {
-        carryover++; // nobody hit the green, carry over
+      // Record this hole, overwrite only if we get CTP data we didn't have before
+      if(!par3Map[h]||(hd.ctp&&!par3Map[h].ctp)){
+        par3Map[h]={ctp:hd.ctp||null};
       }
     }
   });
 
-  // Net earnings per player: for each CTP win, collect amount*multiplier from each other participant
+  // Process holes in order, building events with carryover multiplier
+  const events=[];
+  let carryover=1;
+  Object.keys(par3Map).map(Number).sort((a,b)=>a-b).forEach(h=>{
+    const {ctp}=par3Map[h];
+    if(ctp){
+      events.push({hole:h,ctp,multiplier:carryover});
+      carryover=1; // reset
+    } else {
+      carryover++; // carry to next par 3
+    }
+  });
+
   return{events, pendingCarryover:carryover-1};
 }
 
@@ -2336,36 +2341,50 @@ function calcSettlement(parts,getCount,amountPerWin){
 function settlementSummary(settlements,icon){
   if(!settlements.length) return'';
   const rows=[];
-  // Compare every pair — A owes B if B has more wins than A
-  // Amount = (B.count - A.count) * amountPerWin
-  // Derive amountPerWin from paid/totalOtherWins for any player with wins to pay
-  // Use first player with paid > 0 to get amountPerWin
-  const ref=settlements.find(s=>s.paid>0&&settlements.filter(o=>o.pid!==s.pid).reduce((t,o)=>t+o.count,0)>0);
-  if(!ref) return'';
-  const othersWins=settlements.filter(o=>o.pid!==ref.pid).reduce((t,o)=>t+o.count,0);
-  const amtPerWin=othersWins>0?ref.paid/othersWins:0;
-  if(!amtPerWin) return'';
 
-  for(let i=0;i<settlements.length;i++){
-    for(let j=0;j<settlements.length;j++){
-      if(i===j) continue;
-      const payer=settlements[i], payee=settlements[j];
-      // payer owes payee if payee has more wins
-      const amt=(payee.count - payer.count)*amtPerWin;
-      if(amt>0.005){
-        rows.push(`<div style="display:flex;align-items:center;gap:6px;padding:7px 12px;border-bottom:1px solid rgba(0,39,76,0.05);">
-          <span style="font-size:13px;color:#B71C1C;font-weight:bold;">${payer.name}</span>
-          <span style="font-size:12px;color:var(--text-muted);">owes</span>
-          <span style="font-size:13px;color:#1B5E20;font-weight:bold;">${payee.name}</span>
-          <span style="font-size:14px;font-weight:bold;color:var(--blue);margin-left:auto;">$${Math.round(amt)}</span>
-        </div>`);
+  // Check if we have count-based data (pinnies/birdies/skins) or net-based (CTP with rollover)
+  const hasCountData=settlements.some(s=>s.count>0);
+  const ref=hasCountData?settlements.find(s=>s.paid>0&&settlements.filter(o=>o.pid!==s.pid).reduce((t,o)=>t+o.count,0)>0):null;
+  const othersWins=ref?settlements.filter(o=>o.pid!==ref.pid).reduce((t,o)=>t+o.count,0):0;
+  const amtPerWin=ref&&othersWins>0?ref.paid/othersWins:0;
+
+  if(amtPerWin>0){
+    // Count-based: payer owes payee (payee.count - payer.count) * amtPerWin
+    for(let i=0;i<settlements.length;i++){
+      for(let j=0;j<settlements.length;j++){
+        if(i===j) continue;
+        const payer=settlements[i], payee=settlements[j];
+        const amt=(payee.count - payer.count)*amtPerWin;
+        if(amt>0.005) rows.push(debtRow(payer.name,payee.name,amt));
       }
     }
+  } else {
+    // Net-based: use waterfall from net values (winners vs losers)
+    const winners=settlements.filter(s=>s.net>0.005).map(s=>({...s}));
+    const losers=settlements.filter(s=>s.net<-0.005).map(s=>({...s,net:-s.net}));
+    let wi=0,li=0;
+    while(wi<winners.length&&li<losers.length){
+      const amt=Math.min(winners[wi].net,losers[li].net);
+      if(amt>0.005) rows.push(debtRow(losers[li].name,winners[wi].name,amt));
+      winners[wi].net-=amt; losers[li].net-=amt;
+      if(winners[wi].net<0.005) wi++;
+      if(losers[li].net<0.005) li++;
+    }
   }
+
   if(!rows.length) return'';
   return`<div style="border-top:2px solid rgba(0,39,76,0.08);">
     <div style="padding:6px 12px 4px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);">Settlement</div>
     ${rows.join('')}
+  </div>`;
+}
+
+function debtRow(payerName,payeeName,amt){
+  return`<div style="display:flex;align-items:center;gap:6px;padding:7px 12px;border-bottom:1px solid rgba(0,39,76,0.05);">
+    <span style="font-size:13px;color:#B71C1C;font-weight:bold;">${payerName}</span>
+    <span style="font-size:12px;color:var(--text-muted);">owes</span>
+    <span style="font-size:13px;color:#1B5E20;font-weight:bold;">${payeeName}</span>
+    <span style="font-size:14px;font-weight:bold;color:var(--blue);margin-left:auto;">$${Math.round(amt)}</span>
   </div>`;
 }
 
@@ -2501,10 +2520,18 @@ function renderBetting(){
       </div>`;
     }).join('');
 
-    // Build settlement from net amounts
+    // Build settlement objects compatible with settlementSummary
+    // settlementSummary uses count & derives amtPerWin from paid/totalOtherWins
+    // For CTP with rollover, just pass net directly and use a sentinel count
+    // Instead, build direct pair debts manually like pinnies
     const ctpSettlements=parts.map(pid=>{
       const p=state.players.find(pl=>pl.id===pid);
-      return{pid,name:p?p.name:'?',count:playerCTPs(pid),net:netByPid[pid]||0,paid:0,earned:0};
+      const net=netByPid[pid]||0;
+      // count = number of CTP wins, paid = what they owe others total
+      const myWins=events.filter(e=>e.ctp===pid).reduce((s,e)=>s+e.multiplier,0);
+      const paid=Math.max(0,-net); // total owed by this player
+      const earned=Math.max(0,net);
+      return{pid,name:p?p.name:'?',count:myWins,net,paid,earned};
     });
 
     // Pending carryover banner
