@@ -475,6 +475,12 @@ function avgHT(ids){if(!ids||!ids.length)return'\u2014';return(ids.reduce((a,id)
 /* \u2550\u2550\u2550 RENDER \u2550\u2550\u2550 */
 function render(){
   if(!state.roomCode){renderJoinScreen();return;}
+  // Always reroll individual scores to linked team matches on every render
+  state.matches.forEach((m,mi)=>{
+    if(m.matchType==='individual'&&m.linkedFrom){
+      matchHoles(m).forEach(h=>rollUpToTeamMatch(mi,h));
+    }
+  });
   document.getElementById('app').innerHTML=`
     <div class="topbar">
       <div class="topbar-inner">
