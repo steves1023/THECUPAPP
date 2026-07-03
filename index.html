@@ -1035,21 +1035,38 @@ function renderMatchCard(m,i){
           const s2=pids.filter(id=>sides[id]==='2');
           // Count played holes for individual
           const indPlayed=Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];return d&&pids.some((_,pi)=>d['p'+pids.indexOf(_)]!=null);}).length;
-          // Each player gets their own row
-          return pids.map(id=>{
+          // Calculate combined net per side
+          const ipls=pids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
+          const minH=ipls.length?Math.min(...ipls.map(p=>p.handicap||0)):0;
+          const diffs=ipls.map(p=>Math.round(((p.handicap||0)-minH)*(m.hdcpPercent||100)/100));
+          // Side totals
+          let s1net=0,s1any=false,s2net=0,s2any=false;
+          pids.forEach((id,pi)=>{
+            const onS2=sides[id]==='2';
+            for(let h=1;h<=m.totalHoles;h++){
+              const hd2=(m.holes||{})[h];if(!hd2)continue;
+              const raw=hd2['p'+pi];if(raw==null)continue;
+              const net=raw-strokesOn(diffs[pi],holeSI(m,h),m.totalHoles);
+              if(onS2){s2net+=net;s2any=true;}else{s1net+=net;s1any=true;}
+            }
+          });
+          // Each player gets their own row, side total shown on last player of each side
+          const s1pids=pids.filter(id=>sides[id]!=='2');
+          const s2pids=pids.filter(id=>sides[id]==='2');
+          return [...s1pids,...s2pids].map((id,rowIdx)=>{
             const p=state.players.find(pl=>pl.id===id);
             if(!p)return'';
-            const side=sides[id]==='2'?'2':'1';
-            const tc=side==='2'?state.team2.color:state.team1.color;
-            const pi=pids.indexOf(id);
-            const hd2overall=m.holes||{};
-            let tot=0,any=false;
-            Object.values(hd2overall).forEach(hd=>{if(hd&&hd['p'+pi]!=null){tot+=hd['p'+pi];any=true;}});
+            const onS2=sides[id]==='2';
+            const tc=onS2?state.team2.color:state.team1.color;
+            const isLastS1=!onS2&&id===s1pids[s1pids.length-1];
+            const isLastS2=onS2&&id===s2pids[s2pids.length-1];
+            const showTotal=(isLastS1&&s1any)||(isLastS2&&s2any);
+            const sideNet=onS2?s2net:s1net;
             return`<div class="match-player-row" style="border-bottom:1px solid rgba(0,39,76,0.06);">
               <div class="player-color-dot" style="background:${tc};"></div>
               <div class="player-name-label" style="color:var(--blue);">${p.name}</div>
               <div class="player-hdcp-tag">HCP ${p.handicap}</div>
-              ${any?`<div class="player-score-num" style="color:var(--blue);font-size:16px;">${tot}</div>`:''}
+              ${showTotal?`<div class="player-score-num" style="color:var(--blue);font-size:16px;">${sideNet}</div>`:''}
             </div>`;
           }).join('');
         })():`
