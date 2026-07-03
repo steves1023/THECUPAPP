@@ -996,20 +996,25 @@ function renderMatchCard(m,i){
           // Group by side
           const s1=pids.filter(id=>sides[id]!=='2');
           const s2=pids.filter(id=>sides[id]==='2');
-          const s1label=s1.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name:'?';}).join(' / ')||state.team1.name;
-          const s2label=s2.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name:'?';}).join(' / ')||state.team2.name;
           // Count played holes for individual
           const indPlayed=Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];return d&&pids.some((_,pi)=>d['p'+pids.indexOf(_)]!=null);}).length;
-          return`<div class="match-player-row">
-            <div class="player-color-dot" style="background:${state.team1.color};"></div>
-            <div class="player-name-label" style="color:var(--blue);">${s1label}</div>
-            <div class="player-hdcp-tag">HCP ${avgHT(s1)}</div>
-          </div>
-          <div class="match-player-row">
-            <div class="player-color-dot" style="background:${state.team2.color};"></div>
-            <div class="player-name-label" style="color:var(--blue);">${s2label}</div>
-            <div class="player-hdcp-tag">HCP ${avgHT(s2)}</div>
-          </div>`;
+          // Each player gets their own row
+          return pids.map(id=>{
+            const p=state.players.find(pl=>pl.id===id);
+            if(!p)return'';
+            const side=sides[id]==='2'?'2':'1';
+            const tc=side==='2'?state.team2.color:state.team1.color;
+            const pi=pids.indexOf(id);
+            const hd2overall=m.holes||{};
+            let tot=0,any=false;
+            Object.values(hd2overall).forEach(hd=>{if(hd&&hd['p'+pi]!=null){tot+=hd['p'+pi];any=true;}});
+            return`<div class="match-player-row" style="border-bottom:1px solid rgba(0,39,76,0.06);">
+              <div class="player-color-dot" style="background:${tc};"></div>
+              <div class="player-name-label" style="color:var(--blue);">${p.name}</div>
+              <div class="player-hdcp-tag">HCP ${p.handicap}</div>
+              ${any?`<div class="player-score-num" style="color:var(--blue);font-size:16px;">${tot}</div>`:''}
+            </div>`;
+          }).join('');
         })():`
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team1.color};"></div>
