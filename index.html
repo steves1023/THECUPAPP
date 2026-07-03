@@ -2266,12 +2266,13 @@ function savePools(){
 }
 
 function calcSettlement(parts,getCount,amountPerWin){
-  // Each person pays equally into the pot, winners get paid per win
-  // Net = (wins * amountPerWin) - (totalPot / numParticipants)
-  const counts={};parts.forEach(pid=>counts[pid]=getCount(pid));
-  const totalWinnings=parts.reduce((s,pid)=>s+counts[pid]*amountPerWin,0);
-  const shareEach=parts.length?totalWinnings/parts.length:0;
-  return parts.map(pid=>{
+  // Filter to only participants who exist in current player list
+  const validParts=parts.filter(pid=>state.players.find(pl=>pl.id===pid));
+  if(!validParts.length) return[];
+  const counts={};validParts.forEach(pid=>counts[pid]=getCount(pid));
+  const totalWinnings=validParts.reduce((s,pid)=>s+counts[pid]*amountPerWin,0);
+  const shareEach=validParts.length?totalWinnings/validParts.length:0;
+  return validParts.map(pid=>{
     const p=state.players.find(pl=>pl.id===pid);
     const earned=counts[pid]*amountPerWin;
     const net=earned-shareEach;
@@ -2314,7 +2315,9 @@ function renderBetting(){
   function participantsOf(key){
     const pool=pools[key];
     if(!pool||!pool.active)return[];
-    return pool.participants&&pool.participants.length>0?pool.participants:allPids;
+    const raw=pool.participants&&pool.participants.length>0?pool.participants:allPids;
+    // Filter out any pids that no longer exist in the player list
+    return raw.filter(pid=>state.players.find(p=>p.id===pid));
   }
 
   // ── Birdies ──
