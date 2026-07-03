@@ -979,10 +979,8 @@ function renderMatchCard(m,i){
   // Combined NET scores per team across all holes
   let t1t=0,t2t=0,t1any=false,t2any=false;
   const hasLinkedInd=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
-  console.log('[card] match',m.id,'hasLinkedInd',hasLinkedInd,'matchType',m.matchType);
   for(let h=1;h<=m.totalHoles;h++){
     const d=(m.holes||{})[h];if(!d)continue;
-    if(d.t1!=null||d.t2!=null) console.log('[card] hole',h,'d.t1',d.t1,'d.t2',d.t2);
     if(d.t1!=null){
       if(hasLinkedInd){t1t+=d.t1;t1any=true;}
       else{const si=holeSI(m,h),st=strokesOn(hDiff(m),si,m.totalHoles);t1t+=(st<0?d.t1+st:d.t1);t1any=true;}
@@ -992,7 +990,6 @@ function renderMatchCard(m,i){
       else{const si=holeSI(m,h),st=strokesOn(hDiff(m),si,m.totalHoles);t2t+=(st>0?d.t2-st:d.t2);t2any=true;}
     }
   }
-  console.log('[card] t1t',t1t,'t2t',t2t);
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
   let dots='';
   for(let h=1;h<=m.totalHoles;h++){
@@ -1141,18 +1138,18 @@ function renderGroupCard(parent,pi,children){
   let pDots='';
   for(let h=1;h<=parent.totalHoles;h++){
     const d=(parent.holes||{})[h];let cls='pending';
-    if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(parent),si=holeSI(parent,h),st=strokesOn(hd,si,parent.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
+    if(d&&d.t1!=null&&d.t2!=null){cls=d.t1<d.t2?'win1':d.t2<d.t1?'win2':'halve';}
     const pDotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
     pDots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${pDotBg};"></div></div>`;
   }
   const pSc=pRes.winner==='team1'?'status-t1':pRes.winner==='team2'?'status-t2':'status-as';
   let pt1t=0,pt2t=0,pt1any=false,pt2any=false;
-  const phd=hDiff(parent);
+  // t1/t2 on parent holes are already combined net (written by rollUpToTeamMatch)
+  // so just sum them directly — no further stroke adjustment needed
   for(let h=1;h<=parent.totalHoles;h++){
     const d=(parent.holes||{})[h];if(!d)continue;
-    const si=holeSI(parent,h),st=strokesOn(phd,si,parent.totalHoles);
-    if(d.t1!=null){pt1t+=(st<0?d.t1+st:d.t1);pt1any=true;}
-    if(d.t2!=null){pt2t+=(st>0?d.t2-st:d.t2);pt2any=true;}
+    if(d.t1!=null){pt1t+=d.t1;pt1any=true;}
+    if(d.t2!=null){pt2t+=d.t2;pt2any=true;}
   }
   const canScoreParent=true;
 
