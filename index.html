@@ -328,12 +328,19 @@ function mpResult(m){
   if(!played)return{winner:null,status:'AS',points:0};
   const hd=hDiff(m);
   const _mpcd=m.courseData||state.settings.courseData;
+  // Check if scores are already net (rolled up from individual match)
+  const isLinked=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
   for(let h=1;h<=m.totalHoles;h++){
     const d=holes[h];if(!d||d.t1==null||d.t2==null)continue;
-    const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
-    // st > 0 means team2 receives strokes, st < 0 means team1 receives strokes
-    const t1n=st<0?d.t1+st:d.t1;   // team1 net (subtract strokes they receive)
-    const t2n=st>0?d.t2-st:d.t2;   // team2 net (subtract strokes they receive)
+    let t1n,t2n;
+    if(isLinked){
+      // t1/t2 are already combined net — compare directly
+      t1n=d.t1; t2n=d.t2;
+    } else {
+      const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
+      t1n=st<0?d.t1+st:d.t1;
+      t2n=st>0?d.t2-st:d.t2;
+    }
     if(t1n<t2n)up++;else if(t2n<t1n)up--;
   }
   const left=m.totalHoles-played,abs=Math.abs(up);
@@ -963,48 +970,20 @@ function renderMatchCard(m,i){
   const played=isIndMatch
     ?Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];if(!d)return false;const pids=m.indPlayers||[];return pids.some((_,pi)=>d['p'+pi]!=null);}).length
     :Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];return d&&d.t1!=null&&d.t2!=null;}).length;
-  // Combined NET scores — sum all individual players' net scores per team
+  // Combined NET scores per team across all holes
   let t1t=0,t2t=0,t1any=false,t2any=false;
-  // Check if there's a linked individual match to pull per-player scores from
-  const linkedInd=state.matches.find(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
-  if(linkedInd){
-    // Sum each player's net score from the individual match
-    const pids=linkedInd.indPlayers||[];
-    const ipls=pids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
-    const sides=linkedInd.indPlayerSides||{};
-    const minH=ipls.length?Math.min(...ipls.map(p=>p.handicap||0)):0;
-    const diffs=ipls.map(p=>Math.round(((p.handicap||0)-minH)*(linkedInd.hdcpPercent||100)/100));
-    pids.forEach((pid,pi)=>{
-      const onT1=sides[pid]!=='2';
-      let pNet=0,pAny=false;
-      for(let h=1;h<=linkedInd.totalHoles;h++){
-        const hd2=(linkedInd.holes||{})[h];if(!hd2)continue;
-        const raw=hd2['p'+pi];if(raw==null)continue;
-        const si=holeSI(linkedInd,h);
-        const net=raw-strokesOn(diffs[pi],si,linkedInd.totalHoles);
-        pNet+=net;pAny=true;
-      }
-      if(pAny){if(onT1){t1t+=pNet;t1any=true;}else{t2t+=pNet;t2any=true;}}
-    });
-  } else {
-    // Standard team match — use t1/t2 hole scores and apply handicap
-    const hd=hDiff(m);
-    for(let h=1;h<=m.totalHoles;h++){
-      const d=(m.holes||{})[h];if(!d)continue;
-      const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
-      if(d.t1!=null){
-        // Sum each team1 player's score if available, else use team score
-        const t1pids=m.team1Players||[];
-        const t1scores=t1pids.map(pid=>{const pi=(m.indPlayers||[]).indexOf(pid);return pi>=0&&d['p'+pi]!=null?d['p'+pi]:null;}).filter(n=>n!=null);
-        if(t1scores.length){t1t+=t1scores.reduce((a,b)=>a+b,0)-(st<0?Math.abs(st)*t1scores.length:0);t1any=true;}
-        else{t1t+=(st<0?d.t1+st:d.t1);t1any=true;}
-      }
-      if(d.t2!=null){
-        const t2pids=m.team2Players||[];
-        const t2scores=t2pids.map(pid=>{const pi=(m.indPlayers||[]).indexOf(pid);return pi>=0&&d['p'+pi]!=null?d['p'+pi]:null;}).filter(n=>n!=null);
-        if(t2scores.length){t2t+=t2scores.reduce((a,b)=>a+b,0)-(st>0?Math.abs(st)*t2scores.length:0);t2any=true;}
-        else{t2t+=(st>0?d.t2-st:d.t2);t2any=true;}
-      }
+  const hasLinkedInd=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
+  for(let h=1;h<=m.totalHoles;h++){
+    const d=(m.holes||{})[h];if(!d)continue;
+    // When linked, t1/t2 are already combined net sums from rollup
+    // When standalone, apply handicap differential
+    if(d.t1!=null){
+      if(hasLinkedInd){t1t+=d.t1;t1any=true;}
+      else{const si=holeSI(m,h),st=strokesOn(hDiff(m),si,m.totalHoles);t1t+=(st<0?d.t1+st:d.t1);t1any=true;}
+    }
+    if(d.t2!=null){
+      if(hasLinkedInd){t2t+=d.t2;t2any=true;}
+      else{const si=holeSI(m,h),st=strokesOn(hDiff(m),si,m.totalHoles);t2t+=(st>0?d.t2-st:d.t2);t2any=true;}
     }
   }
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
@@ -1014,7 +993,13 @@ function renderMatchCard(m,i){
     if(m.matchType==='individual'){
       if(d){const ipids=m.indPlayers||[];const ipls=ipids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);const iminH=ipls.length?Math.min(...ipls.map(p=>p.handicap||0)):0;const idiffs=ipls.map(p=>Math.round(((p.handicap||0)-iminH)*(m.hdcpPercent||100)/100));const isides=m.indPlayerSides||{};const si=holeSI(m,h);const nets=ipls.map((_,pi)=>{const r=d['p'+pi];if(r==null)return null;return r-strokesOn(idiffs[pi],si,m.totalHoles);});const valid=nets.filter(n=>n!==null);if(valid.length>=2){const mn=Math.min(...valid);const wi=nets.findIndex(n=>n===mn);const tied=nets.filter(n=>n===mn).length>1;cls=tied?'halve':isides[ipids[wi]]==='2'?'win2':'win1';}}
     } else {
-      if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(m),si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles),t1n=st<0?d.t1+st:d.t1,t2n=st>0?d.t2-st:d.t2;cls=t1n<t2n?'win1':t2n<t1n?'win2':'halve';}
+      if(d&&d.t1!=null&&d.t2!=null){
+          const isLnk=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
+          let t1n,t2n;
+          if(isLnk){t1n=d.t1;t2n=d.t2;}
+          else{const hdv=hDiff(m),si=holeSI(m,h),st=strokesOn(hdv,si,m.totalHoles);t1n=st<0?d.t1+st:d.t1;t2n=st>0?d.t2-st:d.t2;}
+          cls=t1n<t2n?'win1':t2n<t1n?'win2':'halve';
+        }
     }
     const dotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
     dots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${dotBg};"></div></div>`;
@@ -2629,41 +2614,29 @@ function rollUpToTeamMatch(indMatchIdx, h){
   const t1pids=team.team1Players||[];
   const t2pids=team.team2Players||[];
 
-  function bestNet(sidePids){
-    let best=null;
+  // Sum net scores for all players on each side
+  function combinedNet(sidePids){
+    let total=null;
     sidePids.forEach(pid=>{
       const pi=pids.indexOf(pid);
       if(pi<0) return;
       const raw=hd['p'+pi];
       if(raw==null) return;
       const net=raw-strokesOn(diffs[pi],si,ind.totalHoles);
-      if(best===null||net<best) best=net;
+      total=(total||0)+net;
     });
-    return best;
+    return total;
   }
 
-  function bestRaw(sidePids){
-    let best=null;
-    sidePids.forEach(pid=>{
-      const pi=pids.indexOf(pid);
-      if(pi<0) return;
-      const raw=hd['p'+pi];
-      if(raw==null) return;
-      if(best===null||raw<best) best=raw;
-    });
-    return best;
-  }
-
-  // Use best raw score for the team scorecard display,
-  // but win/loss calculation uses net (handled by hDiff on team match)
-  const t1best=bestRaw(t1pids);
-  const t2best=bestRaw(t2pids);
+  const t1net=combinedNet(t1pids);
+  const t2net=combinedNet(t2pids);
 
   if(!team.holes[h]) team.holes[h]={par:coursePar};
   team.holes[h].par=coursePar;
-  if(t1best!==null) team.holes[h].t1=t1best;
+  // Store combined net — team match win/loss compares these directly (no extra hDiff needed)
+  if(t1net!==null) team.holes[h].t1=t1net;
   else delete team.holes[h].t1;
-  if(t2best!==null) team.holes[h].t2=t2best;
+  if(t2net!==null) team.holes[h].t2=t2net;
   else delete team.holes[h].t2;
 }
 
