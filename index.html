@@ -661,24 +661,52 @@ function playerCTPs(pid){
   return state.matches.reduce((n,m)=>n+Object.values(m.holes||{}).filter(h=>h&&h.ctp===pid).length,0);
 }
 
-function ctpCarryover(){
-  // Count par 3 holes where scores were entered but no CTP was awarded
-  // These holes roll the pot forward
-  let carryover=0;
+function ctpResults(amountPerPlayer){
+  // Process all par 3s in hole order across all matches
+  // Track carryover multiplier — each unclaimed par 3 adds 1 to the multiplier
+  // When a CTP is awarded, winner collects amount*multiplier from each other player
+  // then multiplier resets to 1
+  const events=[]; // {hole, ctp:pid, multiplier}
+  let carryover=1;
+
   state.matches.forEach(m=>{
     const cd=m.courseData||state.settings.courseData;
-    Object.entries(m.holes||{}).forEach(([h,hd])=>{
-      if(!hd) return;
-      const hNum=parseInt(h);
-      const ch=cd&&cd.holes&&cd.holes[hNum-1];
+    const totalHoles=m.totalHoles||18;
+    for(let h=1;h<=totalHoles;h++){
+      const hd=(m.holes||{})[h];if(!hd)continue;
+      const ch=cd&&cd.holes&&cd.holes[h-1];
       const par=ch?ch.par:null;
-      if(par!==3) return; // only par 3s
-      // Check if any player has a score on this hole
+      if(par!==3) continue;
       const hasScore=Object.keys(hd).some(k=>k.startsWith('p')&&hd[k]!=null)||hd.t1!=null||hd.t2!=null;
-      if(hasScore&&!hd.ctp) carryover++;
-    });
+      if(!hasScore) continue;
+      if(hd.ctp){
+        events.push({hole:h,ctp:hd.ctp,multiplier:carryover});
+        carryover=1; // reset after award
+      } else {
+        carryover++; // nobody hit the green, carry over
+      }
+    }
   });
-  return carryover;
+
+  // Net earnings per player: for each CTP win, collect amount*multiplier from each other participant
+  return{events, pendingCarryover:carryover-1};
+}
+
+function ctpNetPerPlayer(pid, parts, amountPerPlayer){
+  const {events}=ctpResults(amountPerPlayer);
+  const n=parts.length;
+  let net=0;
+  events.forEach(({ctp,multiplier})=>{
+    if(!parts.includes(ctp)) return;
+    const pot=amountPerPlayer*multiplier*(n-1); // total pot = amount * multiplier * others
+    if(ctp===pid) net+=pot; // winner collects
+    else if(parts.includes(pid)) net-=amountPerPlayer*multiplier; // others each pay
+  });
+  return net;
+}
+
+function ctpCarryover(){
+  return ctpResults(1).pendingCarryover;
 }
 /* ═══ SESSIONS ═══ */
 const SESSION_FORMATS=['fourball','foursomes','singles','scramble2','scramble4','bestball','chapman','match','stroke'];
@@ -2445,28 +2473,58 @@ function renderBetting(){
   function ctpSection(){
     const pool=pools.ctp;if(!pool||!pool.active)return'';
     const parts=participantsOf('ctp');
+    const amt=pool.amount||0;
+    const {events,pendingCarryover}=ctpResults(amt);
+    const n=parts.length;
+
+    // Per-player net earnings
+    const netByPid={};
+    parts.forEach(pid=>netByPid[pid]=0);
+    events.forEach(({ctp,multiplier})=>{
+      if(!parts.includes(ctp)) return;
+      const potWon=amt*multiplier*(n-1);
+      netByPid[ctp]=(netByPid[ctp]||0)+potWon;
+      parts.forEach(pid=>{if(pid!==ctp) netByPid[pid]=(netByPid[pid]||0)-amt*multiplier;});
+    });
+
     const rows=parts.map(pid=>{
       const p=state.players.find(pl=>pl.id===pid);if(!p)return'';
       const count=playerCTPs(pid);
-      const winnings=count*(pool.amount||0);
+      const net=netByPid[pid]||0;
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
         <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">⛳</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
         </div>
-        <div style="font-size:15px;font-weight:bold;color:${winnings>0?'#1B5E20':'var(--text-muted)'};">${winnings>0?'+$'+winnings.toFixed(0):'$0'}</div>
+        <div style="font-size:15px;font-weight:bold;color:${net>0?'#1B5E20':net<0?'#C0392B':'var(--text-muted)'};">${net>0?'+$'+net.toFixed(0):net<0?'-$'+Math.abs(net).toFixed(0):'$0'}</div>
       </div>`;
     }).join('');
+
+    // Build settlement from net amounts
+    const ctpSettlements=parts.map(pid=>{
+      const p=state.players.find(pl=>pl.id===pid);
+      return{pid,name:p?p.name:'?',count:playerCTPs(pid),net:netByPid[pid]||0,paid:0,earned:0};
+    });
+
+    // Pending carryover banner
+    const carryBanner=pendingCarryover>0
+      ?`<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(255,203,5,0.12);border-bottom:1px solid rgba(255,203,5,0.2);">
+          <span style="font-size:16px;">🔄</span>
+          <span style="font-size:12px;font-weight:bold;color:var(--blue);">
+            ${pendingCarryover} unclaimed par 3${pendingCarryover!==1?'s':''} — rolls to next par 3
+            · Next winner collects <b>$${amt*(pendingCarryover+1)}</b> from each player
+          </span>
+        </div>`:'' ;
+
     return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px;">
       <div style="background:var(--blue);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
         <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">⛳</span><span style="font-size:13px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:0.5px;">Closest to Pin</span></div>
-        <span style="font-size:12px;color:var(--maize);">$${pool.amount||0}/CTP · ${parts.length} players</span>
+        <span style="font-size:12px;color:var(--maize);">$${amt}/CTP · ${parts.length} players</span>
       </div>
-      ${(()=>{const c=ctpCarryover();return c>0?`<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(255,203,5,0.12);border-bottom:1px solid rgba(255,203,5,0.2);"><span style="font-size:16px;">🔄</span><span style="font-size:12px;font-weight:bold;color:var(--blue);">${c} unclaimed par 3${c!==1?'s':''} — pot carries over · Current value: <b>$${(pool.amount||0)*(c+1)}</b></span></div>`:'';})()} 
+      ${carryBanner}
       ${rows||'<div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center;">No par 3 scores yet</div>'}
-      ${settlementSummary(calcSettlement(parts,pid=>playerCTPs(pid),pool.amount||0),'⛳')}
-      ${ctpCarryover()>0?`<div style="padding:8px 12px;font-size:11px;color:var(--text-muted);border-top:1px solid rgba(0,39,76,0.06);">Note: ${ctpCarryover()} unclaimed hole${ctpCarryover()!==1?'s':''} — award CTP on next par 3 to collect rolled-over pot</div>`:''}
+      ${settlementSummary(ctpSettlements,'⛳')}
     </div>`;
   }
 
