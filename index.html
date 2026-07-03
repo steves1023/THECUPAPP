@@ -331,7 +331,10 @@ function mpResult(m){
   for(let h=1;h<=m.totalHoles;h++){
     const d=holes[h];if(!d||d.t1==null||d.t2==null)continue;
     const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
-    const t1n=d.t1-st;if(t1n<d.t2)up++;else if(d.t2<t1n)up--;
+    // st > 0 means team2 receives strokes, st < 0 means team1 receives strokes
+    const t1n=st<0?d.t1+st:d.t1;   // team1 net (subtract strokes they receive)
+    const t2n=st>0?d.t2-st:d.t2;   // team2 net (subtract strokes they receive)
+    if(t1n<t2n)up++;else if(t2n<t1n)up--;
   }
   const left=m.totalHoles-played,abs=Math.abs(up);
   if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
@@ -404,7 +407,8 @@ function skinsMatchResult(m){
       nets=(players||[]).map((_,pi)=>{const r=d['p'+pi];if(r==null)return null;return r-strokesOn(diffs[pi],holeSI(m,h),m.totalHoles);});
     } else {
       const st=strokesOn(hd,holeSI(m,h),m.totalHoles);
-      const t1=d.t1!=null?d.t1-st:null, t2=d.t2!=null?d.t2:null;
+      const t1=d.t1!=null?(st<0?d.t1+st:d.t1):null;
+      const t2=d.t2!=null?(st>0?d.t2-st:d.t2):null;
       if(t1==null||t2==null) continue;
       nets=[t1,t2];
     }
@@ -968,7 +972,7 @@ function renderMatchCard(m,i){
     if(m.matchType==='individual'){
       if(d){const ipids=m.indPlayers||[];const ipls=ipids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);const iminH=ipls.length?Math.min(...ipls.map(p=>p.handicap||0)):0;const idiffs=ipls.map(p=>Math.round(((p.handicap||0)-iminH)*(m.hdcpPercent||100)/100));const isides=m.indPlayerSides||{};const si=holeSI(m,h);const nets=ipls.map((_,pi)=>{const r=d['p'+pi];if(r==null)return null;return r-strokesOn(idiffs[pi],si,m.totalHoles);});const valid=nets.filter(n=>n!==null);if(valid.length>=2){const mn=Math.min(...valid);const wi=nets.findIndex(n=>n===mn);const tied=nets.filter(n=>n===mn).length>1;cls=tied?'halve':isides[ipids[wi]]==='2'?'win2':'win1';}}
     } else {
-      if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(m),si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
+      if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(m),si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles),t1n=st<0?d.t1+st:d.t1,t2n=st>0?d.t2-st:d.t2;cls=t1n<t2n?'win1':t2n<t1n?'win2':'halve';}
     }
     const dotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
     dots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${dotBg};"></div></div>`;
@@ -1433,7 +1437,8 @@ function openScorecard(mi,startHole){
       }).join('');
 
       const traw=raw;
-      const tnet=traw!=null?(ti===0?traw+st:traw):null; // st negative helps team1
+      // Net = raw minus strokes received on this hole
+      const tnet=traw!=null?(ti===0&&st<0?traw+st:ti===1&&st>0?traw-st:traw):null;
       return`<tr style="border-bottom:1px solid rgba(0,39,76,0.08);">
         <td style="padding:10px 10px;background:#fff;">
           <div style="display:flex;align-items:center;gap:8px;">
