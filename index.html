@@ -2630,21 +2630,23 @@ function rollUpToTeamMatch(indMatchIdx, h){
   const t2pids=team.team2Players||[];
 
   // Sum net scores for all players on each side
-  function combinedNet(sidePids){
+  function combinedNet(sidePids,label){
     let total=null;
     sidePids.forEach(pid=>{
       const pi=pids.indexOf(pid);
-      if(pi<0) return;
+      if(pi<0){console.log('[rollup]',label,'pid',pid,'not in indPlayers');return;}
       const raw=hd['p'+pi];
-      if(raw==null) return;
+      if(raw==null){console.log('[rollup]',label,'pid',pid,'no score hole',h);return;}
       const net=raw-strokesOn(diffs[pi],si,ind.totalHoles);
+      console.log('[rollup]',label,'pid',pid,'raw',raw,'diff',diffs[pi],'si',si,'strokes',strokesOn(diffs[pi],si,ind.totalHoles),'net',net);
       total=(total||0)+net;
     });
+    console.log('[rollup]',label,'total',total,'for hole',h);
     return total;
   }
 
-  const t1net=combinedNet(t1pids);
-  const t2net=combinedNet(t2pids);
+  const t1net=combinedNet(t1pids,'T1');
+  const t2net=combinedNet(t2pids,'T2');
 
   if(!team.holes[h]) team.holes[h]={par:coursePar};
   team.holes[h].par=coursePar;
