@@ -1733,9 +1733,9 @@ function renderMatchModal(){
         </div>
         <div style="flex:1;">
           <div style="font-weight:bold;color:var(--blue);font-size:13px;">Also create Team Match</div>
-          <div style="font-size:11px;color:var(--text-muted);">Individual scores automatically feed into a team match result</div>
+          <div style="font-size:11px;color:var(--text-muted);">Best individual score per side feeds into a linked team match automatically</div>
         </div>
-      </label>
+      </div>
     </div>`}
     ${!isInd&&!isEdit?`<div style="padding:8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:12px;">
       <div onclick="matchDraft.createIndividuals=!matchDraft.createIndividuals;renderMatchModal();" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:4px 0;">
@@ -1743,10 +1743,10 @@ function renderMatchModal(){
           <div style="position:absolute;top:3px;${d.createIndividuals?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.25);transition:all 0.2s;"></div>
         </div>
         <div style="flex:1;">
-          <div style="font-weight:bold;color:var(--blue);font-size:13px;">Also create Individual matches</div>
-          <div style="font-size:11px;color:var(--text-muted);">One match with all players — scores tracked individually</div>
+          <div style="font-weight:bold;color:var(--blue);font-size:13px;">Also create Individual Match</div>
+          <div style="font-size:11px;color:var(--text-muted);">Each player tracks their own score — best score per side rolls up to this team match</div>
         </div>
-      </label>
+      </div>
     </div>`:''}
     <div class="form-group"><label class="form-label">Notes</label><input type="text" value="${d.notes||''}" oninput="draftSet('notes',this.value)" placeholder="e.g. Morning wave, Group A"></div>
     <button class="btn btn-gold w-full" onclick="saveMatch()">${isEdit?'Save Changes':'Create Match'}</button>
@@ -1843,7 +1843,7 @@ function saveMatch(){
             allPids.forEach(id=>{sides[id]=(d.team1Players||[]).includes(id)?'1':'2';});
             state.matches.push({
               id:'m'+(Date.now()+1),...base,
-              format:'singles',
+              format:d.format,
               matchType:'individual',
               indPlayers:allPids,
               indPlayerSides:sides,
