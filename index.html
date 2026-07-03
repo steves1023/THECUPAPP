@@ -963,8 +963,15 @@ function renderMatchCard(m,i){
   const played=isIndMatch
     ?Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];if(!d)return false;const pids=m.indPlayers||[];return pids.some((_,pi)=>d['p'+pi]!=null);}).length
     :Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];return d&&d.t1!=null&&d.t2!=null;}).length;
-  let t1t=0,t2t=0;
-  for(let h=1;h<=m.totalHoles;h++){const d=(m.holes||{})[h];if(d&&d.t1!=null)t1t+=d.t1;if(d&&d.t2!=null)t2t+=d.t2;}
+  // Combined NET scores per team across all holes
+  let t1t=0,t2t=0,t1any=false,t2any=false;
+  const hd=hDiff(m);
+  for(let h=1;h<=m.totalHoles;h++){
+    const d=(m.holes||{})[h];if(!d)continue;
+    const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
+    if(d.t1!=null){t1t+=(st<0?d.t1+st:d.t1);t1any=true;}
+    if(d.t2!=null){t2t+=(st>0?d.t2-st:d.t2);t2any=true;}
+  }
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
   let dots='';
   for(let h=1;h<=m.totalHoles;h++){
@@ -1024,13 +1031,13 @@ function renderMatchCard(m,i){
           <div class="player-color-dot" style="background:${state.team1.color};"></div>
           <div class="player-name-label" style="color:var(--blue);font-weight:${res.winner==='team1'?'bold':'normal'};">${t1l}</div>
           <div class="player-hdcp-tag">HCP ${avgHT(m.team1Players)}</div>
-          <div class="player-score-num" style="color:var(--blue);">${played>0?t1t:'\u2014'}</div>
+          <div class="player-score-num" style="color:var(--blue);">${t1any?t1t:'\u2014'}</div>
         </div>
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team2.color};"></div>
           <div class="player-name-label" style="color:var(--blue);font-weight:${res.winner==='team2'?'bold':'normal'};">${t2l}</div>
           <div class="player-hdcp-tag">HCP ${avgHT(m.team2Players)}</div>
-          <div class="player-score-num" style="color:var(--blue);">${played>0?t2t:'\u2014'}</div>
+          <div class="player-score-num" style="color:var(--blue);">${t2any?t2t:'\u2014'}</div>
         </div>`}
       </div>
       <div class="match-status-col">
@@ -1095,8 +1102,14 @@ function renderGroupCard(parent,pi,children){
     pDots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${pDotBg};"></div></div>`;
   }
   const pSc=pRes.winner==='team1'?'status-t1':pRes.winner==='team2'?'status-t2':'status-as';
-  let pt1t=0,pt2t=0;
-  for(let h=1;h<=parent.totalHoles;h++){const d=(parent.holes||{})[h];if(d&&d.t1!=null)pt1t+=d.t1;if(d&&d.t2!=null)pt2t+=d.t2;}
+  let pt1t=0,pt2t=0,pt1any=false,pt2any=false;
+  const phd=hDiff(parent);
+  for(let h=1;h<=parent.totalHoles;h++){
+    const d=(parent.holes||{})[h];if(!d)continue;
+    const si=holeSI(parent,h),st=strokesOn(phd,si,parent.totalHoles);
+    if(d.t1!=null){pt1t+=(st<0?d.t1+st:d.t1);pt1any=true;}
+    if(d.t2!=null){pt2t+=(st>0?d.t2-st:d.t2);pt2any=true;}
+  }
   const canScoreParent=true;
 
   // Individual match rows
