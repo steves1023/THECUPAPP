@@ -979,10 +979,10 @@ function renderMatchCard(m,i){
   // Combined NET scores per team across all holes
   let t1t=0,t2t=0,t1any=false,t2any=false;
   const hasLinkedInd=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
+  console.log('[card] match',m.id,'hasLinkedInd',hasLinkedInd,'matchType',m.matchType);
   for(let h=1;h<=m.totalHoles;h++){
     const d=(m.holes||{})[h];if(!d)continue;
-    // When linked, t1/t2 are already combined net sums from rollup
-    // When standalone, apply handicap differential
+    if(d.t1!=null||d.t2!=null) console.log('[card] hole',h,'d.t1',d.t1,'d.t2',d.t2);
     if(d.t1!=null){
       if(hasLinkedInd){t1t+=d.t1;t1any=true;}
       else{const si=holeSI(m,h),st=strokesOn(hDiff(m),si,m.totalHoles);t1t+=(st<0?d.t1+st:d.t1);t1any=true;}
@@ -992,6 +992,7 @@ function renderMatchCard(m,i){
       else{const si=holeSI(m,h),st=strokesOn(hDiff(m),si,m.totalHoles);t2t+=(st>0?d.t2-st:d.t2);t2any=true;}
     }
   }
+  console.log('[card] t1t',t1t,'t2t',t2t);
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
   let dots='';
   for(let h=1;h<=m.totalHoles;h++){
