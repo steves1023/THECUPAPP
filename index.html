@@ -309,12 +309,13 @@ function renderSyncBar(){
 }
 
 /* \u2550\u2550\u2550 MATH \u2550\u2550\u2550 */
+function countsForTeamScore(m){return m.countsForTeam!==false;}
 function teamPts(tn){
-  // For extra teams (idx>=3), check which players are on that team and count their match wins
-  if(tn===1||tn===2) return state.matches.reduce((pts,m)=>{const r=mResult(m);if(r.winner==='team'+tn)return pts+r.points;if(r.winner==='half')return pts+0.5;return pts;},0);
+  const scoringMatches=state.matches.filter(countsForTeamScore);
+  if(tn===1||tn===2) return scoringMatches.reduce((pts,m)=>{const r=mResult(m);if(r.winner==='team'+tn)return pts+r.points;if(r.winner==='half')return pts+0.5;return pts;},0);
   const et=getTeamByIdx(tn);if(!et)return 0;
   const pids=et.players||[];
-  return state.matches.reduce((pts,m)=>{
+  return scoringMatches.reduce((pts,m)=>{
     const r=mResult(m);const onT1=(m.team1Players||[]).some(id=>pids.includes(id));const onT2=(m.team2Players||[]).some(id=>pids.includes(id));
     if(r.winner==='team1'&&onT1)return pts+r.points;if(r.winner==='team2'&&onT2)return pts+r.points;if(r.winner==='half'&&(onT1||onT2))return pts+0.5;return pts;
   },0);
@@ -1025,7 +1026,7 @@ function renderScoreboard(){
     </div>
   </div>
 
-  <div class="section-header"><span class="section-title">Live Matches</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>
+  <div class="section-header"><span class="section-title">${state.matches.filter(m=>!m.completedAt).length>0?'Live Matches':'Matches'}</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>
   ${state.matches.length===0?`<div class="empty-state">No matches yet. Tap + Match to begin.</div>`:''}
   ${renderGroupedMatches()}`;
 }
@@ -1078,6 +1079,8 @@ function renderMatchCard(m,i){
       <div style="display:flex;gap:4px;">
         ${canScore?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${i})">✏️ Scores</button>`:''}
         <button class="btn btn-sm btn-ghost" onclick="openMatchBetModal(${i})" style="color:var(--maize);border-color:rgba(255,203,5,0.4);font-size:11px;">💰 Bets</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleCountsForTeam(${i})" style="color:${m.countsForTeam===false?'rgba(255,255,255,0.35)':'var(--maize)'};border-color:${m.countsForTeam===false?'rgba(255,255,255,0.15)':'rgba(255,203,5,0.4)'};font-size:11px;" title="${m.countsForTeam===false?'Not counting for team score':'Counts for team score'}">🏆</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleComplete(${i})" style="color:${m.completedAt?'#2ECC40':'rgba(255,255,255,0.5)'};border-color:${m.completedAt?'rgba(46,204,64,0.4)':'rgba(255,255,255,0.2)'};font-size:11px;">${m.completedAt?'✓ Done':'✓'}</button>
         <button class="btn btn-sm btn-ghost" onclick="openMatchModal(${i})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${i})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>
       </div>
     </div>
@@ -1171,31 +1174,40 @@ function renderMatches(){
 function renderGroupedMatches(){
   const matches=state.matches;
   const rendered=new Set();
-  let html='';
+  let liveHtml='', doneHtml='';
 
-  matches.forEach((m,i)=>{
+  function renderGroup(m,i){
     if(rendered.has(i)) return;
     rendered.add(i);
-
-    // Find all children linked to this match (this is the parent)
     const children=matches
       .map((mc,ci)=>({mc,ci}))
       .filter(({mc,ci})=>!rendered.has(ci)&&mc.linkedFrom===m.id);
-
+    let card='';
     if(children.length===0&&!m.linkedFrom){
-      // Standalone match — render normally
-      html+=renderMatchCard(m,i);
+      card=renderMatchCard(m,i);
     } else if(!m.linkedFrom){
-      // Parent with children — render as grouped card
       children.forEach(({ci})=>rendered.add(ci));
-      html+=renderGroupCard(m,i,children.map(({mc,ci})=>({m:mc,i:ci})));
+      card=renderGroupCard(m,i,children.map(({mc,ci})=>({m:mc,i:ci})));
     } else {
-      // Orphan child (parent deleted?) — render standalone
-      html+=renderMatchCard(m,i);
+      card=renderMatchCard(m,i);
     }
-  });
+    if(m.completedAt) doneHtml+=card;
+    else liveHtml+=card;
+  }
 
-  return html;
+  matches.forEach((m,i)=>renderGroup(m,i));
+
+  let out=liveHtml;
+  if(doneHtml){
+    out+=`<div style="margin:16px 0 8px;display:flex;align-items:center;gap:8px;">
+      <div style="flex:1;height:1px;background:rgba(0,39,76,0.12);"></div>
+      <span style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:rgba(0,39,76,0.35);">Completed</span>
+      <div style="flex:1;height:1px;background:rgba(0,39,76,0.12);"></div>
+    </div>`;
+    // Completed cards shown at reduced opacity
+    out+=`<div style="opacity:0.7;">${doneHtml}</div>`;
+  }
+  return out;
 }
 
 function renderGroupCard(parent,pi,children){
@@ -1948,6 +1960,28 @@ function setIndSide(pid,side){
   renderMatchModal();
 }
 function togglePick(pid,side){const a=matchDraft[side+'Players'],i=a.indexOf(pid);if(i>=0)a.splice(i,1);else a.push(pid);renderMatchModal();}
+function toggleComplete(i){
+  mutate(()=>{
+    const m=state.matches[i];
+    m.completedAt=m.completedAt?null:new Date().toISOString();
+    // Also mark any linked children
+    state.matches.forEach(lm=>{
+      if(lm.linkedFrom===m.id||lm.parentIndMatch===m.id){
+        lm.completedAt=m.completedAt;
+      }
+    });
+  });
+}
+
+
+function toggleCountsForTeam(i){
+  mutate(()=>{
+    const m=state.matches[i];
+    m.countsForTeam=m.countsForTeam===false?true:false;
+  });
+}
+
+
 function addPairing(){
   const p1=(document.getElementById('pair-p1')||{}).value;
   const p2=(document.getElementById('pair-p2')||{}).value;
