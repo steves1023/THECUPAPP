@@ -1742,7 +1742,7 @@ function updHole(mi,h,t,v,par){
 
 /* \u2550\u2550\u2550 MATCH MODAL \u2550\u2550\u2550 */
 function openMatchModal(idx){
-  if(idx!=null){const m=state.matches[idx];matchDraft={editIdx:idx,format:m.format,totalHoles:m.totalHoles,hdcpPercent:m.hdcpPercent!=null?m.hdcpPercent:100,matchType:m.matchType||'teams',indPlayers:[...(m.indPlayers||[])],indPlayerSides:{...(m.indPlayerSides||{})},linkedTeamMatch:false,team1Players:[...(m.team1Players||[])],team2Players:[...(m.team2Players||[])],notes:m.notes||'',courseData:m.courseData||null,selectedTee:m.selectedTee||0,playerTees:{...(m.playerTees||{})}};}
+  if(idx!=null){const m=state.matches[idx];matchDraft={editIdx:idx,format:m.format,totalHoles:m.totalHoles,hdcpPercent:m.hdcpPercent!=null?m.hdcpPercent:100,matchType:m.matchType||'teams',useNet:m.useNet,indPlayers:[...(m.indPlayers||[])],indPlayerSides:{...(m.indPlayerSides||{})},linkedTeamMatch:false,createIndividuals:false,pairings:[],team1Players:[...(m.team1Players||[])],team2Players:[...(m.team2Players||[])],notes:m.notes||'',courseData:m.courseData||null,selectedTee:m.selectedTee||0,playerTees:{...(m.playerTees||{})}};}
   else matchDraft={editIdx:null,format:'fourball',totalHoles:state.settings.holes||18,hdcpPercent:100,matchType:'teams',indPlayers:[],indPlayerSides:{},linkedTeamMatch:false,team1Players:[],team2Players:[],notes:'',courseData:state.settings.courseData||null,selectedTee:0,playerTees:{}};
   renderMatchModal();
 }
@@ -1965,13 +1965,14 @@ function saveMatch(){
       matchBets:[]
     };
     if(d.editIdx!=null){
-      // Edit existing
+      // Edit existing — preserve holes (scores already entered)
       const existing=state.matches[d.editIdx];
+      const savedHoles=existing.holes||{};
       Object.assign(existing,base);
+      existing.holes=savedHoles; // restore scores
       if(isInd){
         existing.indPlayers=d.indPlayers||[];
         existing.indPlayerSides=d.indPlayerSides||{};
-        // derive team players from sides
         existing.team1Players=(d.indPlayers||[]).filter(id=>(d.indPlayerSides||{})[id]!=='2');
         existing.team2Players=(d.indPlayers||[]).filter(id=>(d.indPlayerSides||{})[id]==='2');
       } else {
@@ -1980,6 +1981,17 @@ function saveMatch(){
         existing.indPlayers=[];existing.indPlayerSides={};
       }
       existing.matchBets=existing.matchBets||[];
+      // If there's a linked individual match, update its format/handicap too
+      state.matches.forEach(lm=>{
+        if(lm.linkedFrom===existing.id){
+          lm.format=existing.format;
+          lm.hdcpPercent=existing.hdcpPercent;
+          lm.totalHoles=existing.totalHoles;
+          lm.courseData=existing.courseData;
+          lm.selectedTee=existing.selectedTee;
+          lm.playerTees=existing.playerTees;
+        }
+      });
     } else {
       // New match
       const indMatchId='m'+Date.now();
@@ -2855,6 +2867,8 @@ function addMatchBet(mi, label, type){
     desc=prompt('Bet description:')||label;
   }
   const betType=type==='total'?'stroke_net':type==='custom'?'custom':'stroke_net';
+  // For front9/back9 bets, carryover if tied — store carryover flag
+  const isF9=type==='front', isB9=type==='back';
   mutate(()=>{
     if(!state.bets) state.bets=[];
     state.bets.push({
@@ -2865,14 +2879,18 @@ function addMatchBet(mi, label, type){
       bettorId:(m.team1Players||[])[0]||'',
       againstId:(m.team2Players||[])[0]||'',
       amount:amt,
+      baseAmount:amt,
       notes:FORMATS[m.format]||m.format,
       settled:false,
       matchRef:m.id,
-      segment:type
+      segment:type,
+      // Front 9 ties carry over to back 9
+      carryoverTo:isF9?'back':null,
+      carryoverFrom:isB9?'front':null,
     });
   });
   pushToCloud();
-  openMatchBetModal(mi); // refresh modal
+  openMatchBetModal(mi);
 }
 
 
@@ -2954,7 +2972,18 @@ function settleBet(i){
 }
 
 function confirmSettle(i,winner){
-  mutate(()=>{state.bets[i].settled=true;state.bets[i].winner=winner;});
+  mutate(()=>{
+    const b=state.bets[i];
+    b.settled=true;b.winner=winner;
+    // Front 9 tie carries pot to back 9
+    if(winner==='tie'&&b.carryoverTo){
+      const back=state.bets.find(ob=>ob.matchRef===b.matchRef&&ob.segment===b.carryoverTo&&!ob.settled);
+      if(back){
+        back.amount=(back.amount||0)+(b.baseAmount||b.amount||0);
+        if(!back.description.includes('(+carry)')) back.description=back.description.replace(' — ',' (+carry) — ');
+      }
+    }
+  });
   modal=null;render();
 }
 
@@ -3004,7 +3033,20 @@ function setSub(s,t){subTab[s]=t;render();}
 function editEventName(){if(!state.isHost)return;const n=prompt('Event name:',state.eventName);if(n){mutate(()=>state.eventName=n);render();}}
 function overlayClick(e){if(e.target.classList.contains('modal-overlay')){modal=null;matchDraft=null;render();}}
 function closeModal(){modal=null;matchDraft=null;render();}
-function delMatch(i){if(!confirm('Delete this match?'))return;state.matches.splice(i,1);save();pushToCloud();render();}
+function delMatch(i){
+  const m=state.matches[i];
+  const name=m?`${FORMATS[m.format]||m.format} — ${mLabel(m,1)} vs ${mLabel(m,2)}`:'this match';
+  if(!confirm('Delete '+name+'?\n\nThis cannot be undone.')) return;
+  // Also delete any linked matches (individual/team children)
+  const linkedIds=state.matches.filter(lm=>lm.linkedFrom===m.id||lm.parentIndMatch===m.id).map(lm=>lm.id);
+  if(linkedIds.length>0){
+    if(!confirm('This will also delete '+linkedIds.length+' linked match'+(linkedIds.length!==1?'es':'')+'. Continue?')) return;
+    mutate(()=>{state.matches=state.matches.filter(lm=>!linkedIds.includes(lm.id)&&lm.id!==m.id);});
+  } else {
+    mutate(()=>{state.matches.splice(state.matches.findIndex(lm=>lm.id===m.id),1);});
+  }
+  save();pushToCloud();render();
+}
 function delBet(i){if(confirm('Delete?')){mutate(()=>state.bets.splice(i,1));render();}}
 function delPlayer(id){if(!state.isHost||!confirm('Remove?'))return;mutate(()=>{state.players=state.players.filter(p=>p.id!==id);state.team1.players=(state.team1.players||[]).filter(p=>p!==id);state.team2.players=(state.team2.players||[]).filter(p=>p!==id);(state.extraTeams||[]).forEach(t=>{t.players=(t.players||[]).filter(p=>p!==id);});});render();}
 function resetApp(){if(!state.isHost){alert('Only the host can reset.');return;}if(!confirm('Reset ALL data?'))return;mutate(()=>{state.matches=[];state.bets=[];state.players=[];state.team1.players=[];state.team2.players=[];});render();}
