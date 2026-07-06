@@ -1077,11 +1077,12 @@ function renderMatchCard(m,i){
         ${cn?`<span style="font-size:10px;color:#52c97a;font-family:Arial;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\u26f3 ${cn}</span>`:''}
       </div>
       <div style="display:flex;gap:4px;">
-        ${canScore?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${i})">✏️ Scores</button>`:''}
-        <button class="btn btn-sm btn-ghost" onclick="openMatchBetModal(${i})" style="color:var(--maize);border-color:rgba(255,203,5,0.4);font-size:11px;">💰 Bets</button>
-        <button class="btn btn-sm btn-ghost" onclick="toggleCountsForTeam(${i})" style="color:${m.countsForTeam===false?'rgba(255,255,255,0.35)':'var(--maize)'};border-color:${m.countsForTeam===false?'rgba(255,255,255,0.15)':'rgba(255,203,5,0.4)'};font-size:11px;" title="${m.countsForTeam===false?'Not counting for team score':'Counts for team score'}">🏆</button>
-        <button class="btn btn-sm btn-ghost" onclick="toggleComplete(${i})" style="color:${m.completedAt?'#2ECC40':'rgba(255,255,255,0.5)'};border-color:${m.completedAt?'rgba(46,204,64,0.4)':'rgba(255,255,255,0.2)'};font-size:11px;">${m.completedAt?'✓ Done':'✓'}</button>
-        <button class="btn btn-sm btn-ghost" onclick="openMatchModal(${i})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${i})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>
+        ${canScore&&!state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual')?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${i})" style="padding:4px 10px;">✏️</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="openMatchBetModal(${i})" style="color:var(--maize);border-color:rgba(255,203,5,0.4);padding:4px 8px;">💰</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleCountsForTeam(${i})" style="color:${m.countsForTeam===false?'rgba(255,255,255,0.25)':'var(--maize)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;" title="Team score">🏆</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleComplete(${i})" style="color:${m.completedAt?'#2ECC40':'rgba(255,255,255,0.4)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;" title="Complete">✓</button>
+        <button class="btn btn-sm btn-ghost" onclick="openMatchModal(${i})" style="color:#fff;border-color:rgba(255,255,255,0.2);padding:4px 8px;">✎</button>
+        <button class="btn btn-sm btn-ghost" onclick="delMatch(${i})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.2);padding:4px 8px;">✕</button>
       </div>
     </div>
     <div class="match-body">
@@ -1359,8 +1360,12 @@ function renderGroupCard(parent,pi,children){
         ${cn?`<span style="font-size:10px;color:#52c97a;font-family:Arial;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⛳ ${cn}</span>`:''}
       </div>
       <div style="display:flex;gap:4px;">
-        ${canScoreParent?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${pi})" style="font-size:11px;padding:6px 10px;min-height:32px;">✏️</button>`:''}
-        ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openMatchModal(${pi})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${pi})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>`:''}
+        ${canScoreParent&&children.length===0?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${pi})" style="padding:4px 10px;">✏️</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="openMatchBetModal(${pi})" style="color:var(--maize);border-color:rgba(255,203,5,0.4);padding:4px 8px;">💰</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleCountsForTeam(${pi})" style="color:${parent.countsForTeam===false?'rgba(255,255,255,0.25)':'var(--maize)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;">🏆</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleComplete(${pi})" style="color:${parent.completedAt?'#2ECC40':'rgba(255,255,255,0.4)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;">✓</button>
+        <button class="btn btn-sm btn-ghost" onclick="openMatchModal(${pi})" style="color:#fff;border-color:rgba(255,255,255,0.2);padding:4px 8px;">✎</button>
+        <button class="btn btn-sm btn-ghost" onclick="delMatch(${pi})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.2);padding:4px 8px;">✕</button>
       </div>
     </div>
     <div class="match-body">
@@ -1964,21 +1969,21 @@ function toggleComplete(i){
   mutate(()=>{
     const m=state.matches[i];
     m.completedAt=m.completedAt?null:new Date().toISOString();
-    // Also mark any linked children
     state.matches.forEach(lm=>{
       if(lm.linkedFrom===m.id||lm.parentIndMatch===m.id){
         lm.completedAt=m.completedAt;
       }
     });
   });
+  render();
 }
-
 
 function toggleCountsForTeam(i){
   mutate(()=>{
     const m=state.matches[i];
     m.countsForTeam=m.countsForTeam===false?true:false;
   });
+  render();
 }
 
 
