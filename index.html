@@ -309,6 +309,16 @@ function renderSyncBar(){
 }
 
 /* \u2550\u2550\u2550 MATH \u2550\u2550\u2550 */
+function adjustPtw(delta){
+  const t1=teamPts(1),t2=teamPts(2),tot=t1+t2;
+  const defaultNeed=tot>0?parseFloat((tot/2+0.5).toFixed(1)):0.5;
+  const current=state.settings.pointsToWin||defaultNeed;
+  const next=Math.max(0.5,Math.round((current+delta)*2)/2);
+  mutate(()=>{state.settings.pointsToWin=next;});
+  render();
+}
+
+
 function countsForTeamScore(m){return m.countsForTeam!==false;}
 function teamPts(tn){
   const scoringMatches=state.matches.filter(countsForTeamScore);
@@ -994,33 +1004,47 @@ function updSessionScore(si,h,gi,v,par){
 
 
 function renderScoreboard(){
-  const t1=teamPts(1),t2=teamPts(2),tot=t1+t2,need=tot>0?(tot/2+0.5).toFixed(1):'\u2014';
+  const t1=teamPts(1),t2=teamPts(2);
+  const ptw=state.settings.pointsToWin||null;
+  const totalMatches=state.matches.filter(m=>countsForTeamScore(m)&&!m.linkedFrom).length;
+  // Default needed: majority of total possible points
+  const defaultNeed=totalMatches>0?(totalMatches/2+0.5).toFixed(1):'—';
+  const needDisplay=ptw||defaultNeed;
+  const t1wins=ptw?t1>=ptw:false;
+  const t2wins=ptw?t2>=ptw:false;
+
   return`<div style="padding:12px;">
     <div style="display:flex;gap:8px;align-items:stretch;">
       <!-- Team 1 -->
-      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${state.team1.color};background:#fff;">
-        <div style="background:${state.team1.color};padding:6px 10px;text-align:center;">
+      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${t1wins?'#FFD700':state.team1.color};background:#fff;${t1wins?'box-shadow:0 0 0 3px rgba(255,215,0,0.4);':''}position:relative;">
+        ${t1wins?`<div style="position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:28px;line-height:1;z-index:2;">🏆</div>`:''}
+        <div style="background:${state.team1.color};padding:${t1wins?'18px':'6px'} 10px 6px;text-align:center;">
           <div style="font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:Arial;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${state.team1.name}</div>
         </div>
         <div style="padding:10px;text-align:center;">
-          <div style="font-size:44px;font-weight:bold;line-height:1;color:var(--blue);">${t1}</div>
-          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">points</div>
+          <div style="font-size:44px;font-weight:bold;line-height:1;color:${t1wins?'#B8860B':'var(--blue)'};">${t1}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">${t1wins?'🥇 WINNER':'points'}</div>
         </div>
       </div>
       <!-- Middle -->
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:64px;">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:64px;gap:4px;">
         <div style="font-size:10px;color:var(--text-dim);font-family:Arial;text-transform:uppercase;letter-spacing:0.5px;">Need</div>
-        <div style="font-size:18px;font-weight:bold;color:var(--blue);">${need}</div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button onclick="adjustPtw(-0.5)" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,39,76,0.2);background:#fff;color:var(--blue);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">−</button>
+          <div style="font-size:18px;font-weight:bold;color:var(--blue);min-width:36px;text-align:center;">${needDisplay}</div>
+          <button onclick="adjustPtw(0.5)" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,39,76,0.2);background:#fff;color:var(--blue);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">+</button>
+        </div>
         <div style="font-size:10px;color:var(--text-dim);font-family:Arial;">to win</div>
       </div>
       <!-- Team 2 -->
-      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${state.team2.color};background:#fff;">
-        <div style="background:${state.team2.color};padding:6px 10px;text-align:center;">
+      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${t2wins?'#FFD700':state.team2.color};background:#fff;${t2wins?'box-shadow:0 0 0 3px rgba(255,215,0,0.4);':''}position:relative;">
+        ${t2wins?`<div style="position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:28px;line-height:1;z-index:2;">🏆</div>`:''}
+        <div style="background:${state.team2.color};padding:${t2wins?'18px':'6px'} 10px 6px;text-align:center;">
           <div style="font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:Arial;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${state.team2.name}</div>
         </div>
         <div style="padding:10px;text-align:center;">
-          <div style="font-size:44px;font-weight:bold;line-height:1;color:var(--blue);">${t2}</div>
-          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">points</div>
+          <div style="font-size:44px;font-weight:bold;line-height:1;color:${t2wins?'#B8860B':'var(--blue)'};">${t2}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">${t2wins?'🥇 WINNER':'points'}</div>
         </div>
       </div>
     </div>
