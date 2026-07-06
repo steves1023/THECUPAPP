@@ -334,7 +334,9 @@ function mpResult(m){
     const d=holes[h];if(!d||d.t1==null||d.t2==null)continue;
     let t1n,t2n;
     if(isLinked){
-      // t1/t2 are already combined net — compare directly
+      t1n=d.t1; t2n=d.t2;
+    } else if(m.useNet===false){
+      // Gross mode — compare raw scores
       t1n=d.t1; t2n=d.t2;
     } else {
       const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
@@ -369,6 +371,7 @@ function indResult(m){
     const d=holes[h]; if(!d) continue;
     const nets=players.map((_,pi)=>{
       const raw=d['p'+pi]; if(raw==null) return null;
+      if(m.useNet===false) return raw;
       const si=holeSI(m,h);
       return raw-strokesOn(diffs[pi],si,m.totalHoles);
     });
@@ -1134,9 +1137,13 @@ function renderMatchCard(m,i){
           <div class="player-score-num" style="color:var(--blue);">${t2any?t2t:'\u2014'}</div>
         </div>`}
       </div>
-      <div class="match-status-col">
-        <div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${res.winner==='team1'?state.team1.color:res.winner==='team2'?state.team2.color:'var(--blue)'};">${played?res.status:'—'}</div>
-        <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:4px;">${res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left'}</div>
+      <div class="match-status-col" style="flex-direction:column;justify-content:center;padding:8px;">
+        ${(()=>{
+          const winColor=res.winner==='team1'?state.team1.color:res.winner==='team2'?state.team2.color:'var(--blue)';
+          const statusPill=`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 10px;border-radius:20px;background:${winColor};">${played?res.status:'—'}</div>`;
+          const subText=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:4px;text-align:center;">${res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left'}</div>`;
+          return statusPill+subText;
+        })()}
       </div>
     </div>
     <div class="hole-progress">${dots}</div>
@@ -1833,6 +1840,20 @@ function renderMatchModal(){
         ${!isInd?'Players compete as two sides — one score per team per hole (or lowest ball for Four-Ball).':'Each player tracks their own score. Assign players to sides for match play result.'}
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-label">Scoring</label>
+      <div style="display:flex;gap:8px;">
+        <div onclick="draftSet('useNet',false)" style="flex:1;padding:10px 8px;border-radius:var(--radius);border:2px solid ${!d.useNet?'var(--blue)':'var(--border)'};background:${!d.useNet?'rgba(0,39,76,0.08)':'#fff'};cursor:pointer;text-align:center;">
+          <div style="font-size:13px;font-weight:bold;color:${!d.useNet?'var(--blue)':'var(--text-muted)'};">Gross</div>
+        </div>
+        <div onclick="draftSet('useNet',true)" style="flex:1;padding:10px 8px;border-radius:var(--radius);border:2px solid ${d.useNet?'var(--blue)':'var(--border)'};background:${d.useNet?'rgba(0,39,76,0.08)':'#fff'};cursor:pointer;text-align:center;">
+          <div style="font-size:13px;font-weight:bold;color:${d.useNet?'var(--blue)':'var(--text-muted)'};">Net</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);padding:6px 8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-top:4px;">
+        ${d.useNet?'Net scores used — handicap strokes applied per hole for win/loss.':'Gross scores used — raw scores compared with no handicap adjustment.'}
+      </div>
+    </div>
     ${!isInd?`
     <div class="grid-2" style="gap:12px;margin-bottom:12px;">
       <div><label class="form-label" style="color:${state.team1.color};">${state.team1.name} side</label>
@@ -2388,6 +2409,40 @@ function debtRow(payerName,payeeName,amt){
   </div>`;
 }
 
+function renderBet(b,i){
+  const fmtLabels={'match_net':'Match Play (Net)','match_gross':'Match Play (Gross)','stroke_net':'Stroke Play (Net)','stroke_gross':'Stroke Play (Gross)','match':'Match Play','stroke':'Stroke Play','custom':'Side Bet'};
+  const fmt=fmtLabels[b.type]||b.type||'Side Bet';
+  const bgColor=(b.type||'').includes('match')?'rgba(0,39,76,0.08)':(b.type||'').includes('stroke')?'rgba(255,203,5,0.12)':'rgba(0,39,76,0.04)';
+  return`<div style="padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.06);">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:bold;color:var(--blue);margin-bottom:4px;">${b.description}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:13px;font-weight:bold;color:${state.team1.color};">${b.bettor}</span>
+          <span style="font-size:11px;color:var(--text-dim);">vs</span>
+          <span style="font-size:13px;font-weight:bold;color:${state.team2.color};">${b.against}</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${bgColor};color:var(--blue);">${fmt}</span>
+        </div>
+        ${b.notes?`<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${b.notes}</div>`:''}
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:16px;font-weight:bold;color:var(--blue);">$${b.amount}</div>
+        <div style="font-size:10px;color:var(--text-muted);">per side</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      ${b.settled
+        ?`<span style="font-size:12px;font-weight:bold;padding:4px 10px;border-radius:20px;background:${b.winner==='tie'?'rgba(0,39,76,0.08)':'rgba(46,125,50,0.12)'};color:${b.winner==='tie'?'var(--blue)':'#1B5E20'};">✓ ${b.winner==='tie'?'Tied':b.winner+' wins'}</span>`
+        :`<span style="font-size:11px;color:var(--text-muted);">In play</span>`
+      }
+      <div style="display:flex;gap:6px;">
+        ${!b.settled?`<button class="btn btn-sm btn-gold" onclick="settleBet(${i})">Settle</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="delBet(${i})" style="color:#C0392B;border-color:rgba(192,57,43,0.2);">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderBetting(){
   const pools=getPools();
   const allPids=state.players.map(p=>p.id);
@@ -2558,42 +2613,67 @@ function renderBetting(){
   const anyPoolActive=Object.values(pools).some(p=>p&&p.active);
 
   function combinedSummary(){
-    // Merge Pinnies + CTP net amounts into one consolidated "who owes who"
-    const pinPool=pools.pinnies, ctpPool=pools.ctp;
-    const netByPid2={};
+    // Merge ALL pools + settled side bets into one net per player
+    const netByName={}; // keyed by player name for side bets
 
-    // Add pinnie nets
-    if(pinPool&&pinPool.active){
-      const pinParts=participantsOf('pinnies');
-      const pinSettlements=calcSettlement(pinParts,pid=>playerPinnies(pid),pinPool.amount||0);
-      pinSettlements.forEach(s=>{netByPid2[s.pid]=(netByPid2[s.pid]||0)+s.net;});
+    function addNet(pid,amt){
+      const p=state.players.find(pl=>pl.id===pid);
+      const key=p?p.name:pid;
+      netByName[key]=(netByName[key]||0)+amt;
     }
 
-    // Add CTP nets
-    if(ctpPool&&ctpPool.active){
+    // Birdies
+    if(pools.birdies&&pools.birdies.active){
+      const bParts=participantsOf('birdies');
+      calcSettlement(bParts,pid=>playerBirdies(pid),pools.birdies.amount||0)
+        .forEach(s=>addNet(s.pid,s.net));
+    }
+
+    // Skins
+    if(pools.skins&&pools.skins.active){
+      const sParts=participantsOf('skins');
+      const skinCounts={};sParts.forEach(pid=>skinCounts[pid]=0);
+      state.matches.forEach((_,mi)=>{calcSkinsWinner(mi).forEach(({pid})=>{if(skinCounts[pid]!=null)skinCounts[pid]++;});});
+      calcSettlement(sParts,pid=>skinCounts[pid]||0,pools.skins.amount||0)
+        .forEach(s=>addNet(s.pid,s.net));
+    }
+
+    // Pinnies
+    if(pools.pinnies&&pools.pinnies.active){
+      const pParts=participantsOf('pinnies');
+      calcSettlement(pParts,pid=>playerPinnies(pid),pools.pinnies.amount||0)
+        .forEach(s=>addNet(s.pid,s.net));
+    }
+
+    // CTP
+    if(pools.ctp&&pools.ctp.active){
       const ctpParts=participantsOf('ctp');
-      const ctpAmt=ctpPool.amount||0;
+      const ctpAmt=pools.ctp.amount||0;
       const {events:ctpEvts}=ctpResults(ctpAmt);
       const ctpN=ctpParts.length;
       ctpEvts.forEach(({ctp,multiplier})=>{
         if(!ctpParts.includes(ctp)) return;
-        const potWon=ctpAmt*multiplier*(ctpN-1);
-        netByPid2[ctp]=(netByPid2[ctp]||0)+potWon;
-        ctpParts.forEach(pid=>{if(pid!==ctp) netByPid2[pid]=(netByPid2[pid]||0)-ctpAmt*multiplier;});
+        addNet(ctp,ctpAmt*multiplier*(ctpN-1));
+        ctpParts.forEach(pid=>{if(pid!==ctp) addNet(pid,-ctpAmt*multiplier);});
       });
     }
 
-    const allPids2=Object.keys(netByPid2);
-    if(!allPids2.length) return'';
-    const hasActivity=allPids2.some(pid=>Math.abs(netByPid2[pid])>0.005);
-    if(!hasActivity) return'';
-
-    const combined=allPids2.map(pid=>{
-      const p=state.players.find(pl=>pl.id===pid);
-      return{pid,name:p?p.name:'?',net:netByPid2[pid]||0};
+    // Settled side bets
+    (state.bets||[]).filter(b=>b.settled&&b.winner!=='tie').forEach(b=>{
+      const amt=b.amount||0;
+      if(!amt) return;
+      // winner collects from loser
+      netByName[b.winner]=(netByName[b.winner]||0)+amt;
+      const loser=b.winner===b.bettor?b.against:b.bettor;
+      netByName[loser]=(netByName[loser]||0)-amt;
     });
 
-    // Waterfall settlement
+    const names=Object.keys(netByName);
+    if(!names.length) return'';
+    const hasActivity=names.some(n=>Math.abs(netByName[n])>0.005);
+    if(!hasActivity) return'';
+
+    const combined=names.map(name=>({name,net:netByName[name]||0}));
     const winners=combined.filter(s=>s.net>0.005).sort((a,b)=>b.net-a.net).map(s=>({...s}));
     const losers=combined.filter(s=>s.net<-0.005).sort((a,b)=>a.net-b.net).map(s=>({...s,net:-s.net}));
     if(!winners.length||!losers.length) return'';
@@ -2608,9 +2688,12 @@ function renderBetting(){
     }
     if(!rows.length) return'';
     return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px;border:2px solid var(--maize);">
-      <div style="background:var(--blue);padding:10px 14px;display:flex;align-items:center;gap:8px;">
-        <span style="font-size:18px;">💰</span>
-        <span style="font-size:13px;font-weight:bold;color:var(--maize);text-transform:uppercase;letter-spacing:0.5px;">Combined Settlement (Pinnies + CTP)</span>
+      <div style="background:var(--blue);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;">💰</span>
+          <span style="font-size:13px;font-weight:bold;color:var(--maize);text-transform:uppercase;letter-spacing:0.5px;">Total Settlement</span>
+        </div>
+        <span style="font-size:10px;color:rgba(255,203,5,0.7);">All pools + side bets combined</span>
       </div>
       <div style="padding:4px 0;">${rows.join('')}</div>
     </div>`;
@@ -2658,9 +2741,11 @@ function openAddBet(){
     </div>
     <div class="form-group"><label class="form-label">Format</label>
       <select id="b-type">
-        <option value="match">Match Play (hole by hole)</option>
-        <option value="stroke">Stroke Play (total score)</option>
-        <option value="custom">Side Bet</option>
+        <option value="match_net">Match Play — Net</option>
+        <option value="match_gross">Match Play — Gross</option>
+        <option value="stroke_net">Stroke Play — Net</option>
+        <option value="stroke_gross">Stroke Play — Gross</option>
+        <option value="custom">Side Bet / Custom</option>
       </select></div>
     <div class="form-group"><label class="form-label">Description</label>
       <input type="text" id="b-desc" placeholder="e.g. Front 9 Match"></div>
