@@ -483,6 +483,11 @@ function render(){
     if(m.matchType==='individual'&&m.linkedFrom){
       matchHoles(m).forEach(h=>rollUpToTeamMatch(mi,h));
     }
+    // Roll up 1v1 matches from their parent individual match
+    if(m.is1v1&&m.parentIndMatch){
+      const parent=state.matches.find(pm=>pm.id===m.parentIndMatch);
+      if(parent) matchHoles(parent).forEach(h=>rollUp1v1FromInd(mi,parent,h));
+    }
   });
   document.getElementById('app').innerHTML=`
     <div class="topbar">
@@ -1076,6 +1081,7 @@ function renderMatchCard(m,i){
       </div>
       <div style="display:flex;gap:4px;">
         ${canScore?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${i})">✏️ Scores</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="openMatchBetModal(${i})" style="color:var(--maize);border-color:rgba(255,203,5,0.4);font-size:11px;">💰 Bets</button>
         <button class="btn btn-sm btn-ghost" onclick="openMatchModal(${i})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${i})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>
       </div>
     </div>
@@ -1890,6 +1896,19 @@ function renderMatchModal(){
         </div>
       </div>
     </div>`:''}
+    ${!isInd&&!isEdit?`<div class="form-group">
+      <label class="form-label">1v1 Side Matches <span style="font-size:10px;font-weight:normal;color:var(--text-muted);">optional — scores roll up from individual match</span></label>
+      <div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;">
+        ${(d.pairings||[]).length===0?'<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);">None yet</div>':''}
+        ${(d.pairings||[]).map((pair,pi)=>{const p1=state.players.find(p=>p.id===pair[0]);const p2=state.players.find(p=>p.id===pair[1]);return`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(0,39,76,0.06);"><span style="font-size:13px;font-weight:bold;color:var(--blue);">${p1?p1.name:'?'}<span style="color:var(--text-muted);font-weight:normal;"> vs </span>${p2?p2.name:'?'}</span><button onclick="removePairing(${pi})" style="margin-left:auto;background:none;border:none;color:#C0392B;cursor:pointer;font-size:16px;">✕</button></div>`;}).join('')}
+      </div>
+      ${(d.team1Players||[]).concat(d.team2Players||[]).length>=2?`<div style="display:flex;gap:6px;align-items:center;">
+        <select id="pair-p1" style="flex:1;font-size:13px;padding:8px;border:1.5px solid rgba(0,39,76,0.2);border-radius:var(--radius);"><option value="">Player 1</option>${(d.team1Players||[]).concat(d.team2Players||[]).map(id=>{const p=state.players.find(pl=>pl.id===id);return p?`<option value="${id}">${p.name}</option>`:'';}).join('')}</select>
+        <span style="color:var(--text-muted);flex-shrink:0;">vs</span>
+        <select id="pair-p2" style="flex:1;font-size:13px;padding:8px;border:1.5px solid rgba(0,39,76,0.2);border-radius:var(--radius);"><option value="">Player 2</option>${(d.team1Players||[]).concat(d.team2Players||[]).map(id=>{const p=state.players.find(pl=>pl.id===id);return p?`<option value="${id}">${p.name}</option>`:'';}).join('')}</select>
+        <button class="btn btn-sm btn-gold" onclick="addPairing()" style="flex-shrink:0;">+ Add</button>
+      </div>`:'<div style="font-size:11px;color:var(--text-muted);">Add players to both teams first</div>'}
+    </div>`:''}
     <div class="form-group"><label class="form-label">Notes</label><input type="text" value="${d.notes||''}" oninput="draftSet('notes',this.value)" placeholder="e.g. Morning wave, Group A"></div>
     <button class="btn btn-gold w-full" onclick="saveMatch()">${isEdit?'Save Changes':'Create Match'}</button>
   </div>`;render();
@@ -1914,6 +1933,20 @@ function setIndSide(pid,side){
   renderMatchModal();
 }
 function togglePick(pid,side){const a=matchDraft[side+'Players'],i=a.indexOf(pid);if(i>=0)a.splice(i,1);else a.push(pid);renderMatchModal();}
+function addPairing(){
+  const p1=(document.getElementById('pair-p1')||{}).value;
+  const p2=(document.getElementById('pair-p2')||{}).value;
+  if(!p1||!p2||p1===p2){alert('Select two different players.');return;}
+  if(!matchDraft.pairings) matchDraft.pairings=[];
+  if(matchDraft.pairings.some(p=>p[0]===p1&&p[1]===p2||p[0]===p2&&p[1]===p1)){alert('Pairing already exists.');return;}
+  matchDraft.pairings.push([p1,p2]);
+  renderMatchModal();
+}
+function removePairing(pi){
+  if(matchDraft.pairings) matchDraft.pairings.splice(pi,1);
+  renderMatchModal();
+}
+
 function saveMatch(){
   const d=matchDraft;
   const isInd=d.matchType==='individual';
@@ -1978,13 +2011,15 @@ function saveMatch(){
           holes:{}
         });
         // Optionally create ONE multi-player individual match — all players, each plays own ball
+        let indMatchId2=null;
         if(d.createIndividuals){
           const allPids=[...(d.team1Players||[]),...(d.team2Players||[])];
           if(allPids.length>=2){
             const sides={};
             allPids.forEach(id=>{sides[id]=(d.team1Players||[]).includes(id)?'1':'2';});
+            indMatchId2='m'+(Date.now()+1);
             state.matches.push({
-              id:'m'+(Date.now()+1),...base,
+              id:indMatchId2,...base,
               format:d.format,
               matchType:'individual',
               indPlayers:allPids,
@@ -1997,6 +2032,30 @@ function saveMatch(){
             });
           }
         }
+        // Create 1v1 linked matches from pairings
+        (d.pairings||[]).forEach((pair,pi)=>{
+          const [pid1,pid2]=pair;
+          const p1=state.players.find(p=>p.id===pid1);
+          const p2=state.players.find(p=>p.id===pid2);
+          if(!p1||!p2) return;
+          const sides={[pid1]:'1',[pid2]:'2'};
+          // Figure out which parent individual match has these players
+          const parentId=indMatchId2||teamMatchId;
+          state.matches.push({
+            id:'m'+(Date.now()+2+pi),...base,
+            format:d.format,
+            matchType:'individual',
+            is1v1:true,
+            indPlayers:[pid1,pid2],
+            indPlayerSides:sides,
+            team1Players:[pid1],
+            team2Players:[pid2],
+            notes:p1.name.split(' ')[0]+' vs '+p2.name.split(' ')[0],
+            linkedFrom:parentId,
+            parentIndMatch:indMatchId2||null,
+            holes:{}
+          });
+        });
       }
     }
   });
@@ -2728,6 +2787,89 @@ function renderBetting(){
   </div>`;
 }
 
+function openMatchBetModal(mi){
+  const m=state.matches[mi];
+  const p1=mLabel(m,1), p2=mLabel(m,2);
+  const existing=(state.bets||[]).filter(b=>b.matchRef===m.id);
+
+  modal=`<div class="modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid var(--maize);padding-bottom:10px;">
+      <div>
+        <div class="modal-title">Match Bets</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p1} vs ${p2}</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    ${existing.length>0?`<div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:6px;">Current Bets</div>
+      ${existing.map((b,bi)=>{
+        const realIdx=(state.bets||[]).indexOf(b);
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:6px;">
+          <div>
+            <div style="font-size:13px;font-weight:bold;color:var(--blue);">${b.description}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${b.bettor} vs ${b.against} · $${b.amount}/side</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            ${b.settled?`<span style="font-size:11px;font-weight:bold;color:#1B5E20;">✓ ${b.winner}</span>`:`<button class="btn btn-sm btn-gold" onclick="settleBet(${realIdx});closeModal();">Settle</button>`}
+            <button class="btn btn-sm btn-ghost" onclick="delBet(${realIdx});openMatchBetModal(${mi});" style="color:#C0392B;border-color:rgba(192,57,43,0.2);">✕</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+
+    <div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:10px;">Add Bets</div>
+    <div class="form-group"><label class="form-label">Amount per bet ($)</label>
+      <input type="number" id="mbet-amt" value="10" min="1" style="font-size:18px;text-align:center;">
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+      <button class="btn btn-ghost w-full" onclick="addMatchBet(${mi},'Front 9','front')" style="font-size:14px;justify-content:space-between;">
+        <span>🏌️ Front 9</span><span style="color:var(--text-muted);font-size:12px;">First 9 holes</span>
+      </button>
+      <button class="btn btn-ghost w-full" onclick="addMatchBet(${mi},'Back 9','back')" style="font-size:14px;justify-content:space-between;">
+        <span>🏌️ Back 9</span><span style="color:var(--text-muted);font-size:12px;">Last 9 holes</span>
+      </button>
+      <button class="btn btn-ghost w-full" onclick="addMatchBet(${mi},'Total','total')" style="font-size:14px;justify-content:space-between;">
+        <span>🏆 Total</span><span style="color:var(--text-muted);font-size:12px;">Full ${m.totalHoles} holes</span>
+      </button>
+      <button class="btn btn-ghost w-full" onclick="addMatchBet(${mi},'Custom','custom')" style="font-size:14px;justify-content:space-between;">
+        <span>✏️ Custom</span><span style="color:var(--text-muted);font-size:12px;">Enter description</span>
+      </button>
+    </div>
+  </div>`;
+  render();
+}
+
+function addMatchBet(mi, label, type){
+  const m=state.matches[mi];
+  const amt=parseFloat((document.getElementById('mbet-amt')||{}).value)||10;
+  const p1=mLabel(m,1), p2=mLabel(m,2);
+  let desc=label;
+  if(type==='custom'){
+    desc=prompt('Bet description:')||label;
+  }
+  const betType=type==='total'?'stroke_net':type==='custom'?'custom':'stroke_net';
+  mutate(()=>{
+    if(!state.bets) state.bets=[];
+    state.bets.push({
+      id:'b'+Date.now(),
+      type:betType,
+      description:desc+' — '+p1+' vs '+p2,
+      bettor:p1, against:p2,
+      bettorId:(m.team1Players||[])[0]||'',
+      againstId:(m.team2Players||[])[0]||'',
+      amount:amt,
+      notes:FORMATS[m.format]||m.format,
+      settled:false,
+      matchRef:m.id,
+      segment:type
+    });
+  });
+  pushToCloud();
+  openMatchBetModal(mi); // refresh modal
+}
+
+
 function openAddBet(){
   const allPlayers=state.players;
   const allOptions=[
@@ -2893,6 +3035,15 @@ function updHoleInd(mi,h,pi,inputId,v,par){
 function rollUpToTeamMatch(indMatchIdx, h){
   const ind=state.matches[indMatchIdx];
   if(!ind||!ind.linkedFrom) return;
+
+  // Also roll up 1v1 matches that are linked to this individual match
+  if(!ind.is1v1){
+    state.matches.forEach((m,mi)=>{
+      if(m.is1v1&&(m.linkedFrom===ind.id||m.parentIndMatch===ind.id)){
+        rollUp1v1FromInd(mi,ind,h);
+      }
+    });
+  }
   // Find the parent team match
   const teamIdx=state.matches.findIndex(m=>m.id===ind.linkedFrom);
   if(teamIdx<0) return;
@@ -2946,6 +3097,29 @@ function rerollAllHoles(indMatchIdx){
   const holes=matchHoles(m);
   holes.forEach(h=>rollUpToTeamMatch(indMatchIdx,h));
   save();pushToCloud();render();
+}
+
+
+function rollUp1v1FromInd(matchIdx, indMatch, h){
+  // Copy the two 1v1 players' scores from the parent individual match
+  const m=state.matches[matchIdx];
+  if(!m||!m.is1v1) return;
+  const pids=m.indPlayers||[];
+  if(pids.length!==2) return;
+  const indHd=(indMatch.holes||{})[h];if(!indHd) return;
+  const indPids=indMatch.indPlayers||[];
+
+  if(!m.holes[h]) m.holes[h]={};
+  const ch=(indMatch.courseData||state.settings.courseData)?.holes?.[h-1];
+  if(ch) m.holes[h].par=ch.par;
+
+  pids.forEach((pid,pi)=>{
+    const indPi=indPids.indexOf(pid);
+    if(indPi<0) return;
+    const raw=indHd['p'+indPi];
+    if(raw!=null) m.holes[h]['p'+pi]=raw;
+    else delete m.holes[h]['p'+pi];
+  });
 }
 
 
