@@ -1146,9 +1146,11 @@ function renderMatchCard(m,i){
       <div class="match-status-col" style="flex-direction:column;justify-content:center;padding:8px;">
         ${(()=>{
           const winColor=res.winner==='team1'?state.team1.color:res.winner==='team2'?state.team2.color:'var(--blue)';
-          const statusPill=`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 10px;border-radius:20px;background:${winColor};">${played?res.status:'—'}</div>`;
-          const subText=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:4px;text-align:center;">${res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left'}</div>`;
-          return statusPill+subText;
+          const team2winning=res.winner==='team2'||(!res.winner&&played>0&&false);
+          const holesLeft=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left'}</div>`;
+          const statusPill=played?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 10px;border-radius:20px;background:${winColor};margin-bottom:2px;">${res.status}</div>`:'';
+          // Status above holes-left if team1 winning or AS, below if team2 winning
+          return res.winner==='team2'?(holesLeft+statusPill):(statusPill+holesLeft);
         })()}
       </div>
     </div>
@@ -1363,8 +1365,12 @@ function renderGroupCard(parent,pi,children){
         </div>
       </div>
       <div class="match-status-col">
-        <div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${pRes.winner==='team1'?state.team1.color:pRes.winner==='team2'?state.team2.color:'var(--blue)'};">${pPlayed?pRes.status:'—'}</div>
-        <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:4px;">${pRes.winner!==null?pRes.points+' pt'+(pRes.points!==1?'s':''):parent.totalHoles-pPlayed+' left'}</div>
+        ${(()=>{
+          const pwc=pRes.winner==='team1'?state.team1.color:pRes.winner==='team2'?state.team2.color:'var(--blue)';
+          const phl=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${pRes.winner!==null?pRes.points+' pt'+(pRes.points!==1?'s':''):parent.totalHoles-pPlayed+' left'}</div>`;
+          const psp=pPlayed?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${pwc};margin-bottom:2px;">${pRes.status}</div>`:'';
+          return pRes.winner==='team2'?(phl+psp):(psp+phl);
+        })()}
       </div>
     </div>
     <div class="hole-progress">${pDots}</div>
