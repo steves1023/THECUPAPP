@@ -343,10 +343,8 @@ function mpResult(m){
       t1n=st<0?d.t1+st:d.t1;
       t2n=st>0?d.t2-st:d.t2;
     }
-    console.log('[mp] h',h,'t1',d.t1,'t2',d.t2,'t1n',t1n,'t2n',t2n,'up after',t1n<t2n?up+1:t2n<t1n?up-1:up);
     if(t1n<t2n)up++;else if(t2n<t1n)up--;
   }
-  console.log('[mp] final up=',up,'isLinked',isLinked,'hasRollup',hasRollupData);
   const left=m.totalHoles-played,abs=Math.abs(up);
   if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
   if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
@@ -1039,19 +1037,12 @@ function renderMatchCard(m,i){
   const played=isIndMatch
     ?Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];if(!d)return false;const pids=m.indPlayers||[];return pids.some((_,pi)=>d['p'+pi]!=null);}).length
     :Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];return d&&d.t1!=null&&d.t2!=null;}).length;
-  // Combined NET scores per team across all holes
+  // Team totals — sum whatever rollup wrote to t1/t2 per hole
   let t1t=0,t2t=0,t1any=false,t2any=false;
-  const hasLinkedInd=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
   for(let h=1;h<=m.totalHoles;h++){
     const d=(m.holes||{})[h];if(!d)continue;
-    if(d.t1!=null){
-      if(hasLinkedInd){t1t+=d.t1;t1any=true;}
-      else{const si=holeSI(m,h),st=strokesOn(hDiff(m),si,m.totalHoles);t1t+=(st<0?d.t1+st:d.t1);t1any=true;}
-    }
-    if(d.t2!=null){
-      if(hasLinkedInd){t2t+=d.t2;t2any=true;}
-      else{const si=holeSI(m,h),st=strokesOn(hDiff(m),si,m.totalHoles);t2t+=(st>0?d.t2-st:d.t2);t2any=true;}
-    }
+    if(d.t1!=null){t1t+=d.t1;t1any=true;}
+    if(d.t2!=null){t2t+=d.t2;t2any=true;}
   }
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
   let dots='';
@@ -1068,7 +1059,10 @@ function renderMatchCard(m,i){
           cls=t1n<t2n?'win1':t2n<t1n?'win2':'halve';
         }
     }
-    const dotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
+    const _m1p=(m.team1Players||[])[0],_m1t=_m1p?allTeams().find(t=>t.players.includes(_m1p)):null;
+    const _m2p=(m.team2Players||[])[0],_m2t=_m2p?allTeams().find(t=>t.players.includes(_m2p)):null;
+    const _c1=_m1t?_m1t.color:state.team1.color, _c2=_m2t?_m2t.color:state.team2.color;
+    const dotBg=cls==="win1"?_c1:cls==="win2"?_c2:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
     dots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${dotBg};"></div></div>`;
   }
   const cn=m.courseData?m.courseData.name:(state.settings.courseData?state.settings.courseData.name:'');
@@ -1147,7 +1141,13 @@ function renderMatchCard(m,i){
       </div>
       <div class="match-status-col" style="flex-direction:column;justify-content:center;padding:8px;">
         ${(()=>{
-          const winColor=res.winner==='team1'?state.team1.color:res.winner==='team2'?state.team2.color:'var(--blue)';
+          const mt1pM=(m.team1Players||[])[0];
+          const mt1STM=mt1pM?allTeams().find(t=>t.players.includes(mt1pM)):null;
+          const mt2pM=(m.team2Players||[])[0];
+          const mt2STM=mt2pM?allTeams().find(t=>t.players.includes(mt2pM)):null;
+          const mt1colorM=mt1STM?mt1STM.color:state.team1.color;
+          const mt2colorM=mt2STM?mt2STM.color:state.team2.color;
+          const winColor=res.winner==='team1'?mt1colorM:res.winner==='team2'?mt2colorM:'var(--blue)';
           const team2winning=res.winner==='team2'||(!res.winner&&played>0&&false);
           const holesLeft=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left'}</div>`;
           const statusPill=played?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 10px;border-radius:20px;background:${winColor};margin-bottom:2px;">${res.status}</div>`:'';
@@ -1368,7 +1368,14 @@ function renderGroupCard(parent,pi,children){
       </div>
       <div class="match-status-col">
         ${(()=>{
-          const pwc=pRes.winner==='team1'?state.team1.color:pRes.winner==='team2'?state.team2.color:'var(--blue)';
+          // Derive colors from which state team the match's players belong to
+          const mt1p=(parent.team1Players||[])[0];
+          const mt1StateTeam=mt1p?allTeams().find(t=>t.players.includes(mt1p)):null;
+          const mt2p=(parent.team2Players||[])[0];
+          const mt2StateTeam=mt2p?allTeams().find(t=>t.players.includes(mt2p)):null;
+          const mt1color=mt1StateTeam?mt1StateTeam.color:state.team1.color;
+          const mt2color=mt2StateTeam?mt2StateTeam.color:state.team2.color;
+          const pwc=pRes.winner==='team1'?mt1color:pRes.winner==='team2'?mt2color:'var(--blue)';
           const phl=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${pRes.winner!==null?pRes.points+' pt'+(pRes.points!==1?'s':''):parent.totalHoles-pPlayed+' left'}</div>`;
           const psp=pPlayed?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${pwc};margin-bottom:2px;">${pRes.status}</div>`:'';
           return pRes.winner==='team2'?(phl+psp):(psp+phl);
@@ -3113,24 +3120,25 @@ function rollUpToTeamMatch(indMatchIdx, h){
   const t1pids=team.team1Players||[];
   const t2pids=team.team2Players||[];
 
-  // Sum net scores for all players on each side
-  function combinedNet(sidePids,label){
-    let total=null;
+  // For Four-Ball/Best Ball: use BEST net score per team
+  // For other formats: use combined (sum) net score
+  const isBestBall=['fourball','bestball'].includes((ind.format||team.format||'').toLowerCase());
+  function bestOrCombinedNet(sidePids){
+    let best=null, combined=null;
     sidePids.forEach(pid=>{
       const pi=pids.indexOf(pid);
-      if(pi<0){console.log('[rollup]',label,'pid',pid,'not in indPlayers');return;}
+      if(pi<0) return;
       const raw=hd['p'+pi];
-      if(raw==null){console.log('[rollup]',label,'pid',pid,'no score hole',h);return;}
+      if(raw==null) return;
       const net=raw-strokesOn(diffs[pi],si,ind.totalHoles);
-      console.log('[rollup]',label,'pid',pid,'raw',raw,'diff',diffs[pi],'si',si,'strokes',strokesOn(diffs[pi],si,ind.totalHoles),'net',net);
-      total=(total||0)+net;
+      if(best===null||net<best) best=net;
+      combined=(combined||0)+net;
     });
-    console.log('[rollup]',label,'total',total,'for hole',h);
-    return total;
+    return isBestBall?best:combined;
   }
 
-  const t1net=combinedNet(t1pids,'T1');
-  const t2net=combinedNet(t2pids,'T2');
+  const t1net=bestOrCombinedNet(t1pids);
+  const t2net=bestOrCombinedNet(t2pids);
 
   if(!team.holes[h]) team.holes[h]={par:coursePar};
   team.holes[h].par=coursePar;
