@@ -330,13 +330,15 @@ function mpResult(m){
   const _mpcd=m.courseData||state.settings.courseData;
   // Check if scores are already net (rolled up from individual match)
   const isLinked=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
+  // Also treat as linked if d.t1/d.t2 exist (rollup has already computed net)
+  const hasRollupData=Object.values(holes).some(d=>d&&d.t1!=null&&d.t2!=null);
   for(let h=1;h<=m.totalHoles;h++){
     const d=holes[h];if(!d||d.t1==null||d.t2==null)continue;
     let t1n,t2n;
-    if(isLinked){
+    if(isLinked||hasRollupData){
+      // t1/t2 are already combined net — compare directly (same as hole dots)
       t1n=d.t1; t2n=d.t2;
     } else if(m.useNet===false){
-      // Gross mode — compare raw scores
       t1n=d.t1; t2n=d.t2;
     } else {
       const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
