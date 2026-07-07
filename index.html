@@ -357,10 +357,10 @@ function mpResult(m){
     if(t1n<t2n)up++;else if(t2n<t1n)up--;
   }
   const left=m.totalHoles-played,abs=Math.abs(up);
-  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(left===0)return{winner:'half',status:'AS',points:0.5};
-  return{winner:null,status:'AS',points:0};
+  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1,leading:'team1'};return{winner:null,status:abs+' UP',points:0,leading:'team1'};}
+  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1,leading:'team2'};return{winner:null,status:abs+' UP',points:0,leading:'team2'};}
+  if(left===0)return{winner:'half',status:'AS',points:0.5,leading:null};
+  return{winner:null,status:'AS',points:0,leading:null};
 }
 function indResult(m){
   // For individual matches: compare net scores hole by hole, sum wins per "side"
@@ -395,10 +395,10 @@ function indResult(m){
     }
   }
   const up=s1wins-s2wins, abs=Math.abs(up), left=m.totalHoles-played;
-  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(left===0)return{winner:'half',status:'AS',points:0.5};
-  return{winner:null,status:'AS',points:0};
+  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1,leading:'team1'};return{winner:null,status:abs+' UP',points:0,leading:'team1'};}
+  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1,leading:'team2'};return{winner:null,status:abs+' UP',points:0,leading:'team2'};}
+  if(left===0)return{winner:'half',status:'AS',points:0.5,leading:null};
+  return{winner:null,status:'AS',points:0,leading:null};
 }
 function strokeResult(m){
   let t1=0,t2=0,n=0;
@@ -1175,12 +1175,14 @@ function renderMatchCard(m,i){
           const mt2STM=mt2pM?allTeams().find(t=>t.players.includes(mt2pM)):null;
           const mt1colorM=mt1STM?mt1STM.color:state.team1.color;
           const mt2colorM=mt2STM?mt2STM.color:state.team2.color;
-          const winColor=res.winner==='team1'?mt1colorM:res.winner==='team2'?mt2colorM:'var(--blue)';
-          const team2winning=res.winner==='team2'||(!res.winner&&played>0&&false);
-          const holesLeft=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left'}</div>`;
+          // Use leading (in-progress) or winner (finished) for color + position
+          const currentLeader=res.winner||res.leading;
+          const winColor=currentLeader==='team1'?mt1colorM:currentLeader==='team2'?mt2colorM:'var(--blue)';
+          const subText=res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left';
+          const holesLeft=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${subText}</div>`;
           const statusPill=played?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 10px;border-radius:20px;background:${winColor};margin-bottom:2px;">${res.status}</div>`:'';
-          // Status above holes-left if team1 winning or AS, below if team2 winning
-          return res.winner==='team2'?(holesLeft+statusPill):(statusPill+holesLeft);
+          // Pill above holes-left when team1 leading, below when team2 leading
+          return currentLeader==='team2'?(holesLeft+statusPill):(statusPill+holesLeft);
         })()}
       </div>
     </div>
@@ -1417,9 +1419,11 @@ function renderGroupCard(parent,pi,children){
           const mt1color=mt1StateTeam?mt1StateTeam.color:state.team1.color;
           const mt2color=mt2StateTeam?mt2StateTeam.color:state.team2.color;
           const pwc=pRes.winner==='team1'?mt1color:pRes.winner==='team2'?mt2color:'var(--blue)';
+          const pLeader=pRes.winner||pRes.leading;
+          const pLeaderColor=pLeader==='team1'?mt1color:pLeader==='team2'?mt2color:'var(--blue)';
           const phl=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${pRes.winner!==null?pRes.points+' pt'+(pRes.points!==1?'s':''):parent.totalHoles-pPlayed+' left'}</div>`;
-          const psp=pPlayed?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${pwc};margin-bottom:2px;">${pRes.status}</div>`:'';
-          return pRes.winner==='team2'?(phl+psp):(psp+phl);
+          const psp=pPlayed?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${pLeaderColor};margin-bottom:2px;">${pRes.status}</div>`:'';
+          return pLeader==='team2'?(phl+psp):(psp+phl);
         })()}
       </div>
     </div>
