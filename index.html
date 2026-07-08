@@ -241,9 +241,9 @@ async function pushToCloud(){
     try{
       console.log('[push] upserting code:',state.roomCode);
       // Try upsert by code column
-      const payload={code:state.roomCode,data:JSON.stringify(state),updated_at:new Date().toISOString()};
+      const payload={id:state.roomCode,code:state.roomCode,data:JSON.stringify(state),updated_at:new Date().toISOString()};
       console.log('[push] payload keys:',Object.keys(payload),'code:',payload.code);
-      const{data,error}=await sb.from('events').upsert(payload,{onConflict:'code'}).select();
+      const{data,error}=await sb.from('events').upsert(payload,{onConflict:'id'}).select();
       console.log('[push] result:',{data,error});
       syncStatus=error?'offline':'live';renderSyncBar();
     }catch(e){console.error('[push] exception:',e);syncStatus='offline';renderSyncBar();}
@@ -253,10 +253,10 @@ async function pushToCloud(){
 async function pullFromCloud(code){
   try{
     console.log('[pull] looking for code:',code.toUpperCase());
-    const{data,error}=await sb.from('events').select('data').eq('code',code.toUpperCase()).single();
+    const{data,error}=await sb.from('events').select('data').eq('code',code.toUpperCase()).maybeSingle();
     console.log('[pull] result:',{data,error});
     if(error){console.error('[pull] error code:',error.code,'msg:',error.message);return false;}
-    if(!data){console.error('[pull] no data returned');return false;}
+    if(!data){console.error('[pull] no row found for code:',code);return false;}
     const remote=JSON.parse(data.data);
     const{myName,isHost}=state;
     // Merge with defaults to handle missing fields from old events
@@ -279,12 +279,26 @@ function subscribeToRoom(code){
   realtimeSub=sb.channel('room:'+code)
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'events',filter:'code=eq.'+code},payload=>{
       if(!payload.new?.data)return;
-      const remote=JSON.parse(payload.new.data);
-      const{myName,isHost,roomCode}=state;
-      state={...remote,myName,isHost,roomCode};
-      save();syncStatus='live';render();
+      try{
+        const remote=JSON.parse(payload.new.data);
+        const{myName,isHost,roomCode}=state;
+        state={
+          ...defaultState(),
+          ...remote,
+          myName,isHost,roomCode,
+          extraTeams:remote.extraTeams||[],
+          sessions:remote.sessions||[],
+          pools:remote.pools||defaultState().pools,
+        };
+        save();syncStatus='live';render();
+      }catch(e){console.error('realtime parse error:',e);}
     })
-    .subscribe(s=>{syncStatus=s==='SUBSCRIBED'?'live':'connecting';renderSyncBar();});
+    .subscribe(s=>{
+      syncStatus=s==='SUBSCRIBED'?'live':'connecting';
+      renderSyncBar();
+      // On reconnect, pull fresh state
+      if(s==='SUBSCRIBED') pullFromCloud(code).then(ok=>{if(ok){save();render();}});
+    });
 }
 
 function renderSyncBar(){
@@ -295,12 +309,23 @@ function renderSyncBar(){
 }
 
 /* \u2550\u2550\u2550 MATH \u2550\u2550\u2550 */
+function adjustPtw(delta){
+  const t1=teamPts(1),t2=teamPts(2),tot=t1+t2;
+  const defaultNeed=tot>0?parseFloat((tot/2+0.5).toFixed(1)):0.5;
+  const current=state.settings.pointsToWin||defaultNeed;
+  const next=Math.max(0.5,Math.round((current+delta)*2)/2);
+  mutate(()=>{state.settings.pointsToWin=next;});
+  render();
+}
+
+
+function countsForTeamScore(m){return m.countsForTeam!==false;}
 function teamPts(tn){
-  // For extra teams (idx>=3), check which players are on that team and count their match wins
-  if(tn===1||tn===2) return state.matches.reduce((pts,m)=>{const r=mResult(m);if(r.winner==='team'+tn)return pts+r.points;if(r.winner==='half')return pts+0.5;return pts;},0);
+  const scoringMatches=state.matches.filter(countsForTeamScore);
+  if(tn===1||tn===2) return scoringMatches.reduce((pts,m)=>{const r=mResult(m);if(r.winner==='team'+tn)return pts+r.points;if(r.winner==='half')return pts+0.5;return pts;},0);
   const et=getTeamByIdx(tn);if(!et)return 0;
   const pids=et.players||[];
-  return state.matches.reduce((pts,m)=>{
+  return scoringMatches.reduce((pts,m)=>{
     const r=mResult(m);const onT1=(m.team1Players||[]).some(id=>pids.includes(id));const onT2=(m.team2Players||[]).some(id=>pids.includes(id));
     if(r.winner==='team1'&&onT1)return pts+r.points;if(r.winner==='team2'&&onT2)return pts+r.points;if(r.winner==='half'&&(onT1||onT2))return pts+0.5;return pts;
   },0);
@@ -314,16 +339,28 @@ function mpResult(m){
   if(!played)return{winner:null,status:'AS',points:0};
   const hd=hDiff(m);
   const _mpcd=m.courseData||state.settings.courseData;
+  // Check if scores are already net (rolled up from individual match)
+  const isLinked=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
+  const hasRollupData=Object.values(holes).some(d=>d&&d.t1!=null&&d.t2!=null);
   for(let h=1;h<=m.totalHoles;h++){
     const d=holes[h];if(!d||d.t1==null||d.t2==null)continue;
-    const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
-    const t1n=d.t1-st;if(t1n<d.t2)up++;else if(d.t2<t1n)up--;
+    let t1n,t2n;
+    if(isLinked||hasRollupData){
+      t1n=d.t1; t2n=d.t2;
+    } else if(m.useNet===false){
+      t1n=d.t1; t2n=d.t2;
+    } else {
+      const si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles);
+      t1n=st<0?d.t1+st:d.t1;
+      t2n=st>0?d.t2-st:d.t2;
+    }
+    if(t1n<t2n)up++;else if(t2n<t1n)up--;
   }
   const left=m.totalHoles-played,abs=Math.abs(up);
-  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(left===0)return{winner:'half',status:'AS',points:0.5};
-  return{winner:null,status:'AS',points:0};
+  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1,leading:'team1'};return{winner:null,status:abs+' UP',points:0,leading:'team1'};}
+  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1,leading:'team2'};return{winner:null,status:abs+' UP',points:0,leading:'team2'};}
+  if(left===0)return{winner:'half',status:'AS',points:0.5,leading:null};
+  return{winner:null,status:'AS',points:0,leading:null};
 }
 function indResult(m){
   // For individual matches: compare net scores hole by hole, sum wins per "side"
@@ -345,6 +382,7 @@ function indResult(m){
     const d=holes[h]; if(!d) continue;
     const nets=players.map((_,pi)=>{
       const raw=d['p'+pi]; if(raw==null) return null;
+      if(m.useNet===false) return raw;
       const si=holeSI(m,h);
       return raw-strokesOn(diffs[pi],si,m.totalHoles);
     });
@@ -357,10 +395,10 @@ function indResult(m){
     }
   }
   const up=s1wins-s2wins, abs=Math.abs(up), left=m.totalHoles-played;
-  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1};return{winner:null,status:abs+' UP'};}
-  if(left===0)return{winner:'half',status:'AS',points:0.5};
-  return{winner:null,status:'AS',points:0};
+  if(up>0){if(abs>left)return{winner:'team1',status:abs+'&'+left,points:1,leading:'team1'};return{winner:null,status:abs+' UP',points:0,leading:'team1'};}
+  if(up<0){if(abs>left)return{winner:'team2',status:abs+'&'+left,points:1,leading:'team2'};return{winner:null,status:abs+' UP',points:0,leading:'team2'};}
+  if(left===0)return{winner:'half',status:'AS',points:0.5,leading:null};
+  return{winner:null,status:'AS',points:0,leading:null};
 }
 function strokeResult(m){
   let t1=0,t2=0,n=0;
@@ -390,7 +428,8 @@ function skinsMatchResult(m){
       nets=(players||[]).map((_,pi)=>{const r=d['p'+pi];if(r==null)return null;return r-strokesOn(diffs[pi],holeSI(m,h),m.totalHoles);});
     } else {
       const st=strokesOn(hd,holeSI(m,h),m.totalHoles);
-      const t1=d.t1!=null?d.t1-st:null, t2=d.t2!=null?d.t2:null;
+      const t1=d.t1!=null?(st<0?d.t1+st:d.t1):null;
+      const t2=d.t2!=null?(st>0?d.t2-st:d.t2):null;
       if(t1==null||t2==null) continue;
       nets=[t1,t2];
     }
@@ -450,13 +489,24 @@ function avgHT(ids){if(!ids||!ids.length)return'\u2014';return(ids.reduce((a,id)
 /* \u2550\u2550\u2550 RENDER \u2550\u2550\u2550 */
 function render(){
   if(!state.roomCode){renderJoinScreen();return;}
+  // Always reroll individual scores to linked team matches on every render
+  state.matches.forEach((m,mi)=>{
+    if(m.matchType==='individual'&&m.linkedFrom){
+      matchHoles(m).forEach(h=>rollUpToTeamMatch(mi,h));
+    }
+    // Roll up 1v1 matches from their parent individual match
+    if(m.is1v1&&m.parentIndMatch){
+      const parent=state.matches.find(pm=>pm.id===m.parentIndMatch);
+      if(parent) matchHoles(parent).forEach(h=>rollUp1v1FromInd(mi,parent,h));
+    }
+  });
   document.getElementById('app').innerHTML=`
     <div class="topbar">
       <div class="topbar-inner">
         <img src="${LOGO_B64}" style="height:32px;width:32px;object-fit:contain;flex-shrink:0;" alt="">
-        <div class="event-name" onclick="${state.isHost?'editEventName()':''}"> ${state.eventName}</div>
+        <div class="event-name" onclick="editEventName()"> ${state.eventName}</div>
         <div style="display:flex;gap:6px;">
-          ${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openRoomModal()">Share</button><button class="btn btn-sm btn-ghost" onclick="openSettingsModal()">\u2699</button>`:''}
+          <button class="btn btn-sm btn-gold" onclick="openRoomModal()">Share</button><button class="btn btn-sm btn-ghost" onclick="openSettingsModal()">⚙</button>
           <button class="btn btn-sm btn-ghost" onclick="leaveRoom()" style="font-size:10px;">Leave</button>
         </div>
       </div>
@@ -477,15 +527,15 @@ function renderJoinScreen(){
       <img src="${LOGO_B64}" alt="The Cup" style="width:180px;height:180px;object-fit:contain;margin-bottom:8px;filter:drop-shadow(0 4px 20px rgba(0,0,0,0.4));">
       <div style="font-size:11px;color:rgba(255,255,255,0.75);font-family:Arial;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;">Ryder Cup Style · Scores · Gambling</div>
       <div style="width:100%;max-width:340px;">
-        <div class="form-group"><label class="form-label">Your Name</label>
-          <input type="text" id="j-name" placeholder="Enter your name" value="${state.myName||''}" style="font-size:15px;text-align:center;"></div>
         <div class="form-group"><label class="form-label">Event Name</label>
           <input type="text" id="j-event" placeholder="The Cup 2025" style="font-size:15px;text-align:center;"></div>
-        <div class="form-group"><label class="form-label">Room Code <span style="font-size:10px;font-weight:normal;text-transform:none;opacity:0.7;">(4–6 letters, shared with your group)</span></label>
+        <div class="form-group"><label class="form-label">Room Code <span style="font-size:10px;font-weight:normal;text-transform:none;opacity:0.7;">(unique code for your group)</span></label>
           <input type="text" id="j-newcode" class="code-input" placeholder="e.g. EAGLES" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-gold btn-lg w-full" onclick="createRoom()" style="margin-bottom:12px;">Create New Event</button>
         <div style="text-align:center;font-size:12px;color:var(--text-dim);font-family:Arial;margin:8px 0;">\u2014 or join an existing event \u2014</div>
-        <div class="form-group"><input type="text" id="j-code" class="code-input" placeholder="ENTER CODE" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
+        <div class="form-group"><label class="form-label" style="color:rgba(255,255,255,0.7);">Event Name</label>
+          <input type="text" id="j-join-event" placeholder="Event name" style="font-size:15px;text-align:center;"></div>
+        <div class="form-group"><input type="text" id="j-code" class="code-input" placeholder="ROOM CODE" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-ghost btn-lg w-full" onclick="joinRoom()">Join Event</button>
         <div id="join-error" style="color:#B71C1C;font-size:12px;font-family:Arial;text-align:center;margin-top:10px;min-height:20px;"></div>
       </div>
@@ -506,18 +556,17 @@ function renderTab(){
 
 /* \u2550\u2550\u2550 JOIN/CREATE \u2550\u2550\u2550 */
 async function createRoom(){
-  const name=(document.getElementById('j-name')||{}).value||'';
   const eventName=(document.getElementById('j-event')||{}).value||'The Cup';
   const customCode=((document.getElementById('j-newcode')||{}).value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   const errEl=document.getElementById('join-error');
-  if(!name.trim()){if(errEl)errEl.textContent='Please enter your name.';return;}
+  if(!eventName.trim()){if(errEl)errEl.textContent='Please enter an event name.';return;}
   if(customCode.length<2){if(errEl)errEl.textContent='Room code must be at least 2 characters.';return;}
   if(errEl)errEl.textContent='';
   // Check if code is already taken
   const btn=document.querySelector('.btn-gold.btn-lg');
   if(btn){btn.textContent='Creating...';btn.disabled=true;}
   try{
-    const{data}=await sb.from('events').select('id').eq('code',customCode).single();
+    const{data}=await sb.from('events').select('id').eq('code',customCode).maybeSingle();
     if(data){if(errEl)errEl.textContent='That code is already taken. Try a different one.';if(btn){btn.textContent='Create New Event';btn.disabled=false;}return;}
   }catch(e){/* not found = available */}
   const newCode=customCode;
@@ -528,25 +577,31 @@ async function createRoom(){
     team2:{name:'Falcons',color:'#FFCB05',players:[]},
     players:[],matches:[],bets:[],history:[],sessions:[],savedCourses:[],extraTeams:[],pools:{pinnies:{active:false,amount:5,participants:[]},ctp:{active:false,amount:10,participants:[]},birdies:{active:false,amount:2,participants:[]},skins:{active:false,amount:5,participants:[]}},
     settings:{holes:18,courseData:null},
-    apiKey:'WBDTXEE7RFRB6N3GDTE2T76D34',roomCode:newCode,isHost:true,myName:name.trim(),
+    apiKey:'WBDTXEE7RFRB6N3GDTE2T76D34',roomCode:newCode,isHost:true,myName:'Host',
     eventPassword:'',_completedOpen:false
   };
   save();
   await pushToCloud();subscribeToRoom(newCode);render();
 }
 async function joinRoom(){
-  const name=(document.getElementById('j-name')||{}).value||'';
+  const joinEventName=((document.getElementById('j-join-event')||{}).value||'').trim();
   const rawCode=(document.getElementById('j-code')||{}).value||'';
   const code=rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   const errEl=document.getElementById('join-error');
-  if(!name.trim()){if(errEl)errEl.textContent='Please enter your name.';return;}
-  if(code.length<2){if(errEl)errEl.textContent='Please enter a room code.';return;}
+  if(!joinEventName){if(errEl)errEl.textContent='Please enter the event name.';return;}
+  if(code.length<2){if(errEl)errEl.textContent='Please enter the room code.';return;}
   if(errEl)errEl.textContent='';
   const btn=document.querySelector('.btn-ghost.btn-lg');
   if(btn){btn.textContent='Joining...';btn.disabled=true;}
-  state.myName=name.trim();state.isHost=false;
-  const ok=await pullFromCloud(code.trim().toUpperCase());
+  state.isHost=false;state.myName='Guest';
+  const ok=await pullFromCloud(code);
   if(!ok){if(errEl)errEl.textContent='Room not found. Check the code.';if(btn){btn.textContent='Join Event';btn.disabled=false;}return;}
+  // Verify event name matches (case-insensitive)
+  if(state.eventName.trim().toLowerCase()!==joinEventName.toLowerCase()){
+    if(errEl)errEl.textContent='Event name does not match. Check with the host.';
+    if(btn){btn.textContent='Join Event';btn.disabled=false;}
+    state={...defaultState()};save();return;
+  }
   save();subscribeToRoom(state.roomCode);render();
 }
 function leaveRoom(){
@@ -624,13 +679,66 @@ function playerPinnies(pid){
 function playerCTPs(pid){
   return state.matches.reduce((n,m)=>n+Object.values(m.holes||{}).filter(h=>h&&h.ctp===pid).length,0);
 }
+
+function ctpResults(amountPerPlayer){
+  // Deduplicate par 3 holes across all matches — same hole # should only be counted once
+  // Prefer: individual match > team match, CTP data takes priority
+  const par3Map={}; // hole# -> {ctp, hasScore}
+  state.matches.forEach(m=>{
+    const cd=m.courseData||state.settings.courseData;
+    const totalHoles=m.totalHoles||18;
+    for(let h=1;h<=totalHoles;h++){
+      const hd=(m.holes||{})[h];if(!hd)continue;
+      const ch=cd&&cd.holes&&cd.holes[h-1];
+      if((ch?ch.par:null)!==3) continue;
+      const hasScore=Object.keys(hd).some(k=>k.startsWith('p')&&hd[k]!=null)||hd.t1!=null||hd.t2!=null;
+      if(!hasScore) continue;
+      // Record this hole, overwrite only if we get CTP data we didn't have before
+      if(!par3Map[h]||(hd.ctp&&!par3Map[h].ctp)){
+        par3Map[h]={ctp:hd.ctp||null};
+      }
+    }
+  });
+
+  // Process holes in order, building events with carryover multiplier
+  const events=[];
+  let carryover=1;
+  Object.keys(par3Map).map(Number).sort((a,b)=>a-b).forEach(h=>{
+    const {ctp}=par3Map[h];
+    if(ctp){
+      events.push({hole:h,ctp,multiplier:carryover});
+      carryover=1; // reset
+    } else {
+      carryover++; // carry to next par 3
+    }
+  });
+
+  return{events, pendingCarryover:carryover-1};
+}
+
+function ctpNetPerPlayer(pid, parts, amountPerPlayer){
+  const {events}=ctpResults(amountPerPlayer);
+  const n=parts.length;
+  let net=0;
+  events.forEach(({ctp,multiplier})=>{
+    if(!parts.includes(ctp)) return;
+    const pot=amountPerPlayer*multiplier*(n-1); // total pot = amount * multiplier * others
+    if(ctp===pid) net+=pot; // winner collects
+    else if(parts.includes(pid)) net-=amountPerPlayer*multiplier; // others each pay
+  });
+  return net;
+}
+
+function ctpCarryover(){
+  return ctpResults(1).pendingCarryover;
+}
 /* ═══ SESSIONS ═══ */
 const SESSION_FORMATS=['fourball','foursomes','singles','scramble2','scramble4','bestball','chapman','match','stroke'];
 
 function renderSessions(){
   const sessions=state.sessions||[];
-  return`<div class="section-header"><span class="section-title">Sessions</span>${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openSessionModal(null)">+ Session</button>`:''}</div>`
-    +(sessions.length===0?`<div class="empty-state">No sessions yet.${state.isHost?' Tap + Session to create one.':''}</div>`
+  return`<div class="section-header"><span class="section-title">Sessions</span><button class="btn btn-sm btn-gold" onclick="openSessionModal(null)">+ Session</button></div>`
+    +(sessions.length===0?`<div class="empty-state">No sessions yet. Tap + Session to create one.</div>`
     :sessions.map((s,si)=>renderSessionCard(s,si)).join(''));
 }
 
@@ -661,7 +769,7 @@ function renderSessionCard(s,si){
         return`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;${gi>0?'border-top:1px solid rgba(0,39,76,0.06)':''};">
           <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></div>
           <div style="flex:1;">
-            <div style="font-size:13px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name.split(' ')[0]).join(' + ')}</div>
+            <div style="font-size:13px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name).join(' + ')}</div>
             <div style="font-size:10px;color:var(--text-muted);">HCP ${(players.reduce((a,p)=>a+(p.handicap||0),0)/Math.max(1,players.length)).toFixed(1)}</div>
           </div>
           ${(()=>{let tot=0,n=0;for(let h=1;h<=(s.totalHoles||18);h++){const sc=(s.holes||{})[h];if(sc&&sc['g'+gi]!=null){tot+=sc['g'+gi];n++;}}return n>0?`<div style="font-size:20px;font-weight:bold;color:var(--blue);">${tot}</div>`:`<div style="font-size:13px;color:var(--text-dim);">—</div>`;})()}
@@ -711,14 +819,14 @@ function renderSessionModal(){
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
         ${players.map(p=>`<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:#fff;border:1px solid rgba(0,39,76,0.15);border-radius:20px;">
-          <span style="font-size:12px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+          <span style="font-size:12px;font-weight:bold;color:var(--blue);">${p.name}</span>
           <span style="font-size:10px;color:var(--text-muted);">HCP${p.handicap}</span>
           <button onclick="removeFromGroup(${gi},'${p.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;padding:0;margin-left:2px;">✕</button>
         </div>`).join('')}
       </div>
       ${players.length<playersPerGroup&&availPlayers.length>0?`<div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Add player to group:</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;">
-        ${availPlayers.map(p=>`<button onclick="addToGroup(${gi},'${p.id}')" style="padding:4px 10px;border-radius:20px;border:1px dashed rgba(0,39,76,0.2);background:#fff;cursor:pointer;font-size:11px;color:var(--blue);">+ ${p.name.split(' ')[0]}</button>`).join('')}
+        ${availPlayers.map(p=>`<button onclick="addToGroup(${gi},'${p.id}')" style="padding:4px 10px;border-radius:20px;border:1px dashed rgba(0,39,76,0.2);background:#fff;cursor:pointer;font-size:11px;color:var(--blue);">+ ${p.name}</button>`).join('')}
       </div>`:''}
     </div>`;
   }).join('');
@@ -731,7 +839,7 @@ function renderSessionModal(){
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="form-group"><label class="form-label">Session Name</label>
-      <input type="text" value="${d.name||''}" oninput="sessionDraft.name=this.value" placeholder="e.g. Morning Scramble"></div>
+      <input type="text" value="${d.name||''}" onchange="sessionDraft.name=this.value" onblur="sessionDraft.name=this.value" placeholder="e.g. Morning Scramble"></div>
     <div class="form-group"><label class="form-label">Format</label>
       <select onchange="sessionDraft.format=this.value;sessionDraft.scrGroups=[];renderSessionModal();">
         ${SESSION_FORMATS.map(f=>`<option value="${f}" ${d.format===f?'selected':''}>${FORMATS[f]||f}</option>`).join('')}
@@ -840,7 +948,7 @@ function openSessionScorecard(si,startHole){
         <span style="font-size:12px;font-weight:bold;color:#fff;">${gi+1}</span>
       </div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name.split(' ')[0]).join(' + ')}</div>
+        <div style="font-size:14px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name).join(' + ')}</div>
         <div style="font-size:11px;color:var(--text-muted);">Avg HCP ${avgHcp}${yds?' · '+yds+'y':''}</div>
       </div>
       <input class="sc-input ${cls}" type="number" min="1" max="15"
@@ -897,35 +1005,34 @@ function updSessionScore(si,h,gi,v,par){
 
 function renderScoreboard(){
   const t1=teamPts(1),t2=teamPts(2);
-  const ptw=state.settings&&state.settings.pointsToWin||null;
+  const ptw=state.settings.pointsToWin||null;
   const totalM=state.matches.filter(m=>!m.linkedFrom).length;
   const defaultNeed=totalM>0?parseFloat((totalM/2+0.5).toFixed(1)):14.5;
   const needDisplay=ptw||defaultNeed;
   const t1wins=t1>=needDisplay;
   const t2wins=t2>=needDisplay;
   const doneCount=state.matches.filter(m=>m.completedAt&&!m.linkedFrom).length;
-  const stripes=Array(8).fill('').map((_,i)=>'<div style="position:absolute;top:0;bottom:0;left:'+(10+i*12)+'%;width:1px;background:rgba(255,255,255,0.12);"></div>').join('');
-  const stripesR=Array(8).fill('').map((_,i)=>'<div style="position:absolute;top:0;bottom:0;right:'+(10+i*12)+'%;width:1px;background:rgba(255,255,255,0.12);"></div>').join('');
   const c1=t1wins?'#FFD700':state.team1.color;
   const c2=t2wins?'#FFD700':state.team2.color;
-
-  return('<div style="background:var(--blue);padding:0;">'+
+  const stripes=Array(8).fill('').map((_,i)=>'<div style="position:absolute;top:0;bottom:0;left:'+(10+i*12)+'%;width:1px;background:rgba(255,255,255,0.12);"></div>').join('');
+  const stripesR=Array(8).fill('').map((_,i)=>'<div style="position:absolute;top:0;bottom:0;right:'+(10+i*12)+'%;width:1px;background:rgba(255,255,255,0.12);"></div>').join('');
+  const sb='<div style="background:var(--blue);padding:0;">'+
     '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 0;">'+
       '<div style="display:flex;align-items:center;gap:6px;">'+
-        '<span style="font-size:13px;font-weight:bold;color:'+c1+';">'+(t1wins?'✓ ':'')+needDisplay+'</span>'+
+        '<span style="font-size:13px;font-weight:bold;color:'+c1+';">'+(t1wins?'\u2713 ':'')+needDisplay+'</span>'+
         '<span style="font-size:10px;color:rgba(255,255,255,0.5);">to win</span>'+
       '</div>'+
       '<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;">Points</div>'+
       '<div style="display:flex;align-items:center;gap:6px;">'+
         '<span style="font-size:10px;color:rgba(255,255,255,0.5);">to win</span>'+
-        '<span style="font-size:13px;font-weight:bold;color:'+c2+';">'+needDisplay+(t2wins?' ✓':'')+'</span>'+
+        '<span style="font-size:13px;font-weight:bold;color:'+c2+';">'+needDisplay+(t2wins?' \u2713':'')+'</span>'+
       '</div>'+
     '</div>'+
     '<div style="display:flex;align-items:stretch;margin:8px 0 0;min-height:90px;">'+
       '<div style="flex:1;background:'+state.team1.color+';display:flex;align-items:center;padding:12px 16px;gap:12px;position:relative;overflow:hidden;">'+
-        (t1wins?'<span style="font-size:28px;position:absolute;right:12px;top:8px;z-index:1;">🏆</span>':'')+
+        (t1wins?'<span style="font-size:28px;position:absolute;right:12px;top:8px;z-index:1;">\u{1F3C6}</span>':'')+
         stripes+
-        '<div style="font-size:72px;font-weight:900;color:#fff;line-height:1;font-family:Arial,sans-serif;text-shadow:2px 2px 8px rgba(0,0,0,0.3);position:relative;z-index:1;">'+t1+'</div>'+
+        '<div style="font-size:72px;font-weight:900;color:#fff;line-height:1;font-family:Arial,sans-serif;position:relative;z-index:1;">'+t1+'</div>'+
         '<div style="position:relative;z-index:1;">'+
           '<div style="font-size:13px;font-weight:bold;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:1px;">'+state.team1.name+'</div>'+
           '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:2px;">points</div>'+
@@ -933,40 +1040,41 @@ function renderScoreboard(){
       '</div>'+
       '<div style="width:4px;background:var(--blue);flex-shrink:0;"></div>'+
       '<div style="flex:1;background:'+state.team2.color+';display:flex;align-items:center;justify-content:flex-end;padding:12px 16px;gap:12px;position:relative;overflow:hidden;">'+
-        (t2wins?'<span style="font-size:28px;position:absolute;left:12px;top:8px;z-index:1;">🏆</span>':'')+
+        (t2wins?'<span style="font-size:28px;position:absolute;left:12px;top:8px;z-index:1;">\u{1F3C6}</span>':'')+
         stripesR+
         '<div style="position:relative;z-index:1;text-align:right;">'+
           '<div style="font-size:13px;font-weight:bold;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:1px;">'+state.team2.name+'</div>'+
           '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:2px;">points</div>'+
         '</div>'+
-        '<div style="font-size:72px;font-weight:900;color:#fff;line-height:1;font-family:Arial,sans-serif;text-shadow:2px 2px 8px rgba(0,0,0,0.3);position:relative;z-index:1;">'+t2+'</div>'+
+        '<div style="font-size:72px;font-weight:900;color:#fff;line-height:1;font-family:Arial,sans-serif;position:relative;z-index:1;">'+t2+'</div>'+
       '</div>'+
     '</div>'+
     '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 10px;">'+
       '<div style="font-size:11px;color:rgba(255,255,255,0.5);">'+(totalM>0?(doneCount+'/'+totalM+' matches complete'):'')+'</div>'+
       '<div style="display:flex;align-items:center;gap:6px;">'+
-        '<button onclick="adjustPtw(-0.5)" style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;cursor:pointer;line-height:1;">−</button>'+
+        '<button onclick="adjustPtw(-0.5)" style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;cursor:pointer;line-height:1;">&minus;</button>'+
         '<span style="font-size:10px;color:rgba(255,255,255,0.5);">pts to win</span>'+
         '<button onclick="adjustPtw(0.5)" style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;cursor:pointer;line-height:1;">+</button>'+
       '</div>'+
     '</div>'+
-  '</div>'+
-  '<div class="section-header" style="margin-top:8px;"><span class="section-title">'+
-  (state.matches.filter(m=>!m.completedAt).length>0?'Live Matches':'Matches')+
-  '</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>'+
-  (state.matches.length===0?'<div class="empty-state">No matches yet. Tap + Match to begin.</div>':'')+
-  renderGroupedMatches());
+  '</div>';
+  const mhdr='<div class="section-header" style="margin-top:8px;"><span class="section-title">'+(state.matches.filter(m=>!m.completedAt).length>0?'Live Matches':'Matches')+'</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>'+(state.matches.length===0?'<div class="empty-state">No matches yet. Tap + Match to begin.</div>':'')+renderGroupedMatches();
+  return sb+mhdr;
 }
 
-/* \u2550\u2550\u2550 MATCH CARD \u2550\u2550\u2550 */
 function renderMatchCard(m,i){
   const res=mResult(m),t1l=mLabel(m,1),t2l=mLabel(m,2);
   const isIndMatch=m.matchType==='individual';
   const played=isIndMatch
     ?Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];if(!d)return false;const pids=m.indPlayers||[];return pids.some((_,pi)=>d['p'+pi]!=null);}).length
     :Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];return d&&d.t1!=null&&d.t2!=null;}).length;
-  let t1t=0,t2t=0;
-  for(let h=1;h<=m.totalHoles;h++){const d=(m.holes||{})[h];if(d&&d.t1!=null)t1t+=d.t1;if(d&&d.t2!=null)t2t+=d.t2;}
+  // Team totals — sum whatever rollup wrote to t1/t2 per hole
+  let t1t=0,t2t=0,t1any=false,t2any=false;
+  for(let h=1;h<=m.totalHoles;h++){
+    const d=(m.holes||{})[h];if(!d)continue;
+    if(d.t1!=null){t1t+=d.t1;t1any=true;}
+    if(d.t2!=null){t2t+=d.t2;t2any=true;}
+  }
   const sc=res.winner==='team1'?'status-t1':res.winner==='team2'?'status-t2':'status-as';
   let dots='';
   for(let h=1;h<=m.totalHoles;h++){
@@ -974,14 +1082,23 @@ function renderMatchCard(m,i){
     if(m.matchType==='individual'){
       if(d){const ipids=m.indPlayers||[];const ipls=ipids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);const iminH=ipls.length?Math.min(...ipls.map(p=>p.handicap||0)):0;const idiffs=ipls.map(p=>Math.round(((p.handicap||0)-iminH)*(m.hdcpPercent||100)/100));const isides=m.indPlayerSides||{};const si=holeSI(m,h);const nets=ipls.map((_,pi)=>{const r=d['p'+pi];if(r==null)return null;return r-strokesOn(idiffs[pi],si,m.totalHoles);});const valid=nets.filter(n=>n!==null);if(valid.length>=2){const mn=Math.min(...valid);const wi=nets.findIndex(n=>n===mn);const tied=nets.filter(n=>n===mn).length>1;cls=tied?'halve':isides[ipids[wi]]==='2'?'win2':'win1';}}
     } else {
-      if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(m),si=holeSI(m,h),st=strokesOn(hd,si,m.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
+      if(d&&d.t1!=null&&d.t2!=null){
+          const isLnk=state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual');
+          let t1n,t2n;
+          if(isLnk){t1n=d.t1;t2n=d.t2;}
+          else{const hdv=hDiff(m),si=holeSI(m,h),st=strokesOn(hdv,si,m.totalHoles);t1n=st<0?d.t1+st:d.t1;t2n=st>0?d.t2-st:d.t2;}
+          cls=t1n<t2n?'win1':t2n<t1n?'win2':'halve';
+        }
     }
-    const dotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
+    const _m1p=(m.team1Players||[])[0],_m1t=_m1p?allTeams().find(t=>t.players.includes(_m1p)):null;
+    const _m2p=(m.team2Players||[])[0],_m2t=_m2p?allTeams().find(t=>t.players.includes(_m2p)):null;
+    const _c1=_m1t?_m1t.color:state.team1.color, _c2=_m2t?_m2t.color:state.team2.color;
+    const dotBg=cls==="win1"?_c1:cls==="win2"?_c2:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
     dots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${dotBg};"></div></div>`;
   }
   const cn=m.courseData?m.courseData.name:(state.settings.courseData?state.settings.courseData.name:'');
   const myPid=state.players.find(p=>p.name===state.myName)?.id;
-  const canScore=state.isHost||((m.team1Players||[]).includes(myPid))||((m.team2Players||[]).includes(myPid))||((m.indPlayers||[]).includes(myPid));
+  const canScore=true; // All participants can enter scores
   return`<div class="match-card">
     <div class="match-card-header">
       <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;">
@@ -990,8 +1107,12 @@ function renderMatchCard(m,i){
         ${cn?`<span style="font-size:10px;color:#52c97a;font-family:Arial;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\u26f3 ${cn}</span>`:''}
       </div>
       <div style="display:flex;gap:4px;">
-        ${canScore?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${i})">✏️ Scores</button>`:''}
-        ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openMatchModal(${i})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${i})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>`:''}
+        ${canScore&&!state.matches.some(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual')?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${i})" style="padding:4px 10px;">✏️</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="openMatchBetModal(${i})" style="color:var(--maize);border-color:rgba(255,203,5,0.4);padding:4px 8px;">💰</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleCountsForTeam(${i})" style="color:${m.countsForTeam===false?'rgba(255,255,255,0.25)':'var(--maize)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;" title="Team score">🏆</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleComplete(${i})" style="color:${m.completedAt?'#2ECC40':'rgba(255,255,255,0.4)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;" title="Complete">✓</button>
+        <button class="btn btn-sm btn-ghost" onclick="openMatchModal(${i})" style="color:#fff;border-color:rgba(255,255,255,0.2);padding:4px 8px;">✎</button>
+        <button class="btn btn-sm btn-ghost" onclick="delMatch(${i})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.2);padding:4px 8px;">✕</button>
       </div>
     </div>
     <div class="match-body">
@@ -1002,45 +1123,81 @@ function renderMatchCard(m,i){
           // Group by side
           const s1=pids.filter(id=>sides[id]!=='2');
           const s2=pids.filter(id=>sides[id]==='2');
-          const s1label=s1.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name.split(' ')[0]:'?';}).join(' / ')||state.team1.name;
-          const s2label=s2.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name.split(' ')[0]:'?';}).join(' / ')||state.team2.name;
           // Count played holes for individual
           const indPlayed=Object.keys(m.holes||{}).filter(h=>{const d=(m.holes||{})[h];return d&&pids.some((_,pi)=>d['p'+pids.indexOf(_)]!=null);}).length;
-          return`<div class="match-player-row">
-            <div class="player-color-dot" style="background:${state.team1.color};"></div>
-            <div class="player-name-label" style="color:var(--blue);">${s1label}</div>
-            <div class="player-hdcp-tag">HCP ${avgHT(s1)}</div>
-          </div>
-          <div class="match-player-row">
-            <div class="player-color-dot" style="background:${state.team2.color};"></div>
-            <div class="player-name-label" style="color:var(--blue);">${s2label}</div>
-            <div class="player-hdcp-tag">HCP ${avgHT(s2)}</div>
-          </div>`;
+          // Calculate combined net per side
+          const ipls=pids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
+          const minH=ipls.length?Math.min(...ipls.map(p=>p.handicap||0)):0;
+          const diffs=ipls.map(p=>Math.round(((p.handicap||0)-minH)*(m.hdcpPercent||100)/100));
+          // Side totals
+          let s1net=0,s1any=false,s2net=0,s2any=false;
+          pids.forEach((id,pi)=>{
+            const onS2=sides[id]==='2';
+            for(let h=1;h<=m.totalHoles;h++){
+              const hd2=(m.holes||{})[h];if(!hd2)continue;
+              const raw=hd2['p'+pi];if(raw==null)continue;
+              const net=raw-strokesOn(diffs[pi],holeSI(m,h),m.totalHoles);
+              if(onS2){s2net+=net;s2any=true;}else{s1net+=net;s1any=true;}
+            }
+          });
+          // Each player gets their own row, side total shown on last player of each side
+          const s1pids=pids.filter(id=>sides[id]!=='2');
+          const s2pids=pids.filter(id=>sides[id]==='2');
+          return [...s1pids,...s2pids].map((id,rowIdx)=>{
+            const p=state.players.find(pl=>pl.id===id);
+            if(!p)return'';
+            const onS2=sides[id]==='2';
+            const tc=onS2?state.team2.color:state.team1.color;
+            const isLastS1=!onS2&&id===s1pids[s1pids.length-1];
+            const isLastS2=onS2&&id===s2pids[s2pids.length-1];
+            const showTotal=(isLastS1&&s1any)||(isLastS2&&s2any);
+            const sideNet=onS2?s2net:s1net;
+            return`<div class="match-player-row" style="border-bottom:1px solid rgba(0,39,76,0.06);">
+              <div class="player-color-dot" style="background:${tc};"></div>
+              <div class="player-name-label" style="color:var(--blue);">${p.name}</div>
+              <div class="player-hdcp-tag">HCP ${p.handicap}</div>
+              ${showTotal?`<div class="player-score-num" style="color:var(--blue);font-size:16px;">${sideNet}</div>`:''}
+            </div>`;
+          }).join('');
         })():`
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team1.color};"></div>
           <div class="player-name-label" style="color:var(--blue);font-weight:${res.winner==='team1'?'bold':'normal'};">${t1l}</div>
           <div class="player-hdcp-tag">HCP ${avgHT(m.team1Players)}</div>
-          <div class="player-score-num" style="color:var(--blue);">${played>0?t1t:'\u2014'}</div>
+          <div class="player-score-num" style="color:var(--blue);">${t1any?t1t:'\u2014'}</div>
         </div>
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team2.color};"></div>
           <div class="player-name-label" style="color:var(--blue);font-weight:${res.winner==='team2'?'bold':'normal'};">${t2l}</div>
           <div class="player-hdcp-tag">HCP ${avgHT(m.team2Players)}</div>
-          <div class="player-score-num" style="color:var(--blue);">${played>0?t2t:'\u2014'}</div>
+          <div class="player-score-num" style="color:var(--blue);">${t2any?t2t:'\u2014'}</div>
         </div>`}
       </div>
-      <div class="match-status-col">
-        <div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${res.winner==='team1'?state.team1.color:res.winner==='team2'?state.team2.color:'var(--blue)'};">${played?res.status:'—'}</div>
-        <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:4px;">${res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left'}</div>
+      <div class="match-status-col" style="flex-direction:column;justify-content:center;padding:8px;">
+        ${(()=>{
+          const mt1pM=(m.team1Players||[])[0];
+          const mt1STM=mt1pM?allTeams().find(t=>t.players.includes(mt1pM)):null;
+          const mt2pM=(m.team2Players||[])[0];
+          const mt2STM=mt2pM?allTeams().find(t=>t.players.includes(mt2pM)):null;
+          const mt1colorM=mt1STM?mt1STM.color:state.team1.color;
+          const mt2colorM=mt2STM?mt2STM.color:state.team2.color;
+          // Use leading (in-progress) or winner (finished) for color + position
+          const currentLeader=res.winner||res.leading;
+          const winColor=currentLeader==='team1'?mt1colorM:currentLeader==='team2'?mt2colorM:'var(--blue)';
+          const subText=res.winner!==null?res.points+' pt'+(res.points!==1?'s':''):m.totalHoles-played+' left';
+          const holesLeft=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${subText}</div>`;
+          const statusPill=played?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 10px;border-radius:20px;background:${winColor};margin-bottom:2px;">${res.status}</div>`:'';
+          // Pill above holes-left when team1 leading, below when team2 leading
+          return currentLeader==='team2'?(holesLeft+statusPill):(statusPill+holesLeft);
+        })()}
       </div>
     </div>
     <div class="hole-progress">${dots}</div>
   </div>`;
 }
-function mLabel(m,tn){const ids=tn===1?m.team1Players:m.team2Players;if(!ids||!ids.length)return tn===1?state.team1.name:state.team2.name;return ids.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name.split(' ')[0]:'?';}).join(' / ');}
+function mLabel(m,tn){const ids=tn===1?m.team1Players:m.team2Players;if(!ids||!ids.length)return tn===1?state.team1.name:state.team2.name;return ids.map(id=>{const p=state.players.find(pl=>pl.id===id);return p?p.name:'?';}).join(' / ');}
 function renderMatches(){
-  return`<div class="section-header"><span class="section-title">All Matches</span>${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ New Match</button>`:''}</div>`
+  return`<div class="section-header"><span class="section-title">All Matches</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ New Match</button></div>`
     +(state.matches.length===0?`<div class="empty-state">No matches yet.</div>`:'')
     +renderGroupedMatches();
 }
@@ -1050,31 +1207,40 @@ function renderMatches(){
 function renderGroupedMatches(){
   const matches=state.matches;
   const rendered=new Set();
-  let html='';
+  let liveHtml='', doneHtml='';
 
-  matches.forEach((m,i)=>{
+  function renderGroup(m,i){
     if(rendered.has(i)) return;
     rendered.add(i);
-
-    // Find all children linked to this match (this is the parent)
     const children=matches
       .map((mc,ci)=>({mc,ci}))
       .filter(({mc,ci})=>!rendered.has(ci)&&mc.linkedFrom===m.id);
-
+    let card='';
     if(children.length===0&&!m.linkedFrom){
-      // Standalone match — render normally
-      html+=renderMatchCard(m,i);
+      card=renderMatchCard(m,i);
     } else if(!m.linkedFrom){
-      // Parent with children — render as grouped card
       children.forEach(({ci})=>rendered.add(ci));
-      html+=renderGroupCard(m,i,children.map(({mc,ci})=>({m:mc,i:ci})));
+      card=renderGroupCard(m,i,children.map(({mc,ci})=>({m:mc,i:ci})));
     } else {
-      // Orphan child (parent deleted?) — render standalone
-      html+=renderMatchCard(m,i);
+      card=renderMatchCard(m,i);
     }
-  });
+    if(m.completedAt) doneHtml+=card;
+    else liveHtml+=card;
+  }
 
-  return html;
+  matches.forEach((m,i)=>renderGroup(m,i));
+
+  let out=liveHtml;
+  if(doneHtml){
+    out+=`<div style="margin:16px 0 8px;display:flex;align-items:center;gap:8px;">
+      <div style="flex:1;height:1px;background:rgba(0,39,76,0.12);"></div>
+      <span style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:rgba(0,39,76,0.35);">Completed</span>
+      <div style="flex:1;height:1px;background:rgba(0,39,76,0.12);"></div>
+    </div>`;
+    // Completed cards shown at reduced opacity
+    out+=`<div style="opacity:0.7;">${doneHtml}</div>`;
+  }
+  return out;
 }
 
 function renderGroupCard(parent,pi,children){
@@ -1087,21 +1253,27 @@ function renderGroupCard(parent,pi,children){
   let pDots='';
   for(let h=1;h<=parent.totalHoles;h++){
     const d=(parent.holes||{})[h];let cls='pending';
-    if(d&&d.t1!=null&&d.t2!=null){const hd=hDiff(parent),si=holeSI(parent,h),st=strokesOn(hd,si,parent.totalHoles),t1n=d.t1-st;cls=t1n<d.t2?'win1':d.t2<t1n?'win2':'halve';}
+    if(d&&d.t1!=null&&d.t2!=null){cls=d.t1<d.t2?'win1':d.t2<d.t1?'win2':'halve';}
     const pDotBg=cls==="win1"?state.team1.color:cls==="win2"?state.team2.color:cls==="halve"?"rgba(0,39,76,0.25)":"rgba(0,39,76,0.08)";
     pDots+=`<div style="display:flex;flex-direction:column;align-items:center;gap:1px;"><span style="font-size:7px;color:rgba(0,39,76,0.35);font-family:Arial;font-weight:bold;line-height:1;">${h}</span><div class="hp-dot" style="background:${pDotBg};"></div></div>`;
   }
   const pSc=pRes.winner==='team1'?'status-t1':pRes.winner==='team2'?'status-t2':'status-as';
-  let pt1t=0,pt2t=0;
-  for(let h=1;h<=parent.totalHoles;h++){const d=(parent.holes||{})[h];if(d&&d.t1!=null)pt1t+=d.t1;if(d&&d.t2!=null)pt2t+=d.t2;}
-  const canScoreParent=state.isHost||((parent.team1Players||[]).includes(myPid))||((parent.team2Players||[]).includes(myPid));
+  let pt1t=0,pt2t=0,pt1any=false,pt2any=false;
+  // t1/t2 on parent holes are already combined net (written by rollUpToTeamMatch)
+  // so just sum them directly — no further stroke adjustment needed
+  for(let h=1;h<=parent.totalHoles;h++){
+    const d=(parent.holes||{})[h];if(!d)continue;
+    if(d.t1!=null){pt1t+=d.t1;pt1any=true;}
+    if(d.t2!=null){pt2t+=d.t2;pt2any=true;}
+  }
+  const canScoreParent=true;
 
   // Individual match rows
   const childRows=children.map(({m:cm,i:ci})=>{
     const cPids=cm.indPlayers||[];
     const cPlayers=cPids.map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
     if(!cPlayers.length) return '';
-    const canScoreChild=state.isHost||(cPids.includes(myPid));
+    const canScoreChild=true;
     const minH=Math.min(...cPlayers.map(pl=>pl.handicap||0));
     const diffs=cPlayers.map(pl=>Math.round(((pl.handicap||0)-minH)*(cm.hdcpPercent||100)/100));
     const holes=matchHoles(cm);
@@ -1153,7 +1325,7 @@ function renderGroupCard(parent,pi,children){
         let row=`<td style="background:#fff;padding:4px 5px;white-space:nowrap;border-right:2px solid rgba(0,39,76,0.08);">
           <div style="display:flex;align-items:center;gap:4px;">
             <span style="width:8px;height:8px;border-radius:50%;background:${tc};display:inline-block;flex-shrink:0;"></span>
-            <span style="font-size:11px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+            <span style="font-size:11px;font-weight:bold;color:var(--blue);">${p.name}</span>
             <span style="font-size:9px;color:var(--text-muted);">HCP${p.handicap}${diffs[pi]>0?' +'+diffs[pi]:''}</span>
           </div>
         </td>`;
@@ -1220,8 +1392,12 @@ function renderGroupCard(parent,pi,children){
         ${cn?`<span style="font-size:10px;color:#52c97a;font-family:Arial;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⛳ ${cn}</span>`:''}
       </div>
       <div style="display:flex;gap:4px;">
-        ${canScoreParent?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${pi})" style="font-size:11px;padding:6px 10px;min-height:32px;">✏️</button>`:''}
-        ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openMatchModal(${pi})" style="color:#fff;border-color:rgba(255,255,255,0.3);">Edit</button><button class="btn btn-sm btn-ghost" onclick="delMatch(${pi})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.3);">✕</button>`:''}
+        ${canScoreParent&&children.length===0?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${pi})" style="padding:4px 10px;">✏️</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="openMatchBetModal(${pi})" style="color:var(--maize);border-color:rgba(255,203,5,0.4);padding:4px 8px;">💰</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleCountsForTeam(${pi})" style="color:${parent.countsForTeam===false?'rgba(255,255,255,0.25)':'var(--maize)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;">🏆</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleComplete(${pi})" style="color:${parent.completedAt?'#2ECC40':'rgba(255,255,255,0.4)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;">✓</button>
+        <button class="btn btn-sm btn-ghost" onclick="openMatchModal(${pi})" style="color:#fff;border-color:rgba(255,255,255,0.2);padding:4px 8px;">✎</button>
+        <button class="btn btn-sm btn-ghost" onclick="delMatch(${pi})" style="color:#ff9aa2;border-color:rgba(255,150,150,0.2);padding:4px 8px;">✕</button>
       </div>
     </div>
     <div class="match-body">
@@ -1240,8 +1416,21 @@ function renderGroupCard(parent,pi,children){
         </div>
       </div>
       <div class="match-status-col">
-        <div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${pRes.winner==='team1'?state.team1.color:pRes.winner==='team2'?state.team2.color:'var(--blue)'};">${pPlayed?pRes.status:'—'}</div>
-        <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:4px;">${pRes.winner!==null?pRes.points+' pt'+(pRes.points!==1?'s':''):parent.totalHoles-pPlayed+' left'}</div>
+        ${(()=>{
+          // Derive colors from which state team the match's players belong to
+          const mt1p=(parent.team1Players||[])[0];
+          const mt1StateTeam=mt1p?allTeams().find(t=>t.players.includes(mt1p)):null;
+          const mt2p=(parent.team2Players||[])[0];
+          const mt2StateTeam=mt2p?allTeams().find(t=>t.players.includes(mt2p)):null;
+          const mt1color=mt1StateTeam?mt1StateTeam.color:state.team1.color;
+          const mt2color=mt2StateTeam?mt2StateTeam.color:state.team2.color;
+          const pwc=pRes.winner==='team1'?mt1color:pRes.winner==='team2'?mt2color:'var(--blue)';
+          const pLeader=pRes.winner||pRes.leading;
+          const pLeaderColor=pLeader==='team1'?mt1color:pLeader==='team2'?mt2color:'var(--blue)';
+          const phl=`<div style="font-size:10px;color:var(--text-muted);font-family:Arial;text-align:center;">${pRes.winner!==null?pRes.points+' pt'+(pRes.points!==1?'s':''):parent.totalHoles-pPlayed+' left'}</div>`;
+          const psp=pPlayed?`<div style="font-size:14px;font-weight:bold;color:#fff;font-family:Arial;text-align:center;padding:4px 8px;border-radius:20px;background:${pLeaderColor};margin-bottom:2px;">${pRes.status}</div>`:'';
+          return pLeader==='team2'?(phl+psp):(psp+phl);
+        })()}
       </div>
     </div>
     <div class="hole-progress">${pDots}</div>
@@ -1283,6 +1472,11 @@ function scoreCellStyle(score, par){
 
 function openScorecard(mi,startHole){
   const m=state.matches[mi];
+  // Auto reroll all holes to team match when opening individual scorecard
+  if(m&&m.linkedFrom){
+    const holes=matchHoles(m);
+    holes.forEach(h=>rollUpToTeamMatch(mi,h));
+  }
   const isInd=m.matchType==='individual';
   const cd=m.courseData||state.settings.courseData;
   const holes=matchHoles(m);
@@ -1377,7 +1571,7 @@ function openScorecard(mi,startHole){
             </div>
             <div style="flex:1;">
               <div style="display:flex;align-items:center;gap:6px;">
-                <span style="font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</span>
+                <span style="font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</span>
                 <span style="font-size:10px;color:var(--text-muted);">HCP${p.handicap}</span>
                 ${yds?`<span style="font-size:10px;color:var(--text-dim);">${yds}y</span>`:''}
               </div>
@@ -1434,7 +1628,8 @@ function openScorecard(mi,startHole){
       }).join('');
 
       const traw=raw;
-      const tnet=traw!=null?(ti===0?traw+st:traw):null; // st negative helps team1
+      // Net = raw minus strokes received on this hole
+      const tnet=traw!=null?(ti===0&&st<0?traw+st:ti===1&&st>0?traw-st:traw):null;
       return`<tr style="border-bottom:1px solid rgba(0,39,76,0.08);">
         <td style="padding:10px 10px;background:#fff;">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -1487,7 +1682,7 @@ function openScorecard(mi,startHole){
       <div>
         <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;">${FORMATS[m.format]||m.format}${courseName?' · '+courseName:''}</div>
         <div style="font-size:14px;font-weight:bold;color:var(--blue);margin-top:1px;">
-          ${isInd?(m.indPlayers||[]).map(id=>state.players.find(p=>p.id===id)?.name.split(' ')[0]).filter(Boolean).join(' · '):`${mLabel(m,1)} vs ${mLabel(m,2)}`}
+          ${isInd?(m.indPlayers||[]).map(id=>state.players.find(p=>p.id===id)?.name).filter(Boolean).join(' · '):`${mLabel(m,1)} vs ${mLabel(m,2)}`}
         </div>
       </div>
       <button class="modal-close" onclick="closeModal()">✕</button>
@@ -1534,6 +1729,10 @@ function updHoleAndRefresh(mi,h,key,v,par){
 function updHoleIndAndRefresh(mi,h,pi,v,par){
   updHoleInd(mi,h,pi,'sc-'+mi+'-'+h+'-'+pi,v,par);
   setTimeout(()=>openScorecard(mi,h),50);
+}
+function rerollFromScorecard(mi){
+  // Re-roll all holes from individual → team match, then re-render
+  rerollAllHoles(mi);
 }
 function togglePinnieHole(mi,h,pid,add){
   const m=state.matches[mi];
@@ -1603,8 +1802,7 @@ function updHole(mi,h,t,v,par){
 
 /* \u2550\u2550\u2550 MATCH MODAL \u2550\u2550\u2550 */
 function openMatchModal(idx){
-  if(!state.isHost)return;
-  if(idx!=null){const m=state.matches[idx];matchDraft={editIdx:idx,format:m.format,totalHoles:m.totalHoles,hdcpPercent:m.hdcpPercent!=null?m.hdcpPercent:100,matchType:m.matchType||'teams',indPlayers:[...(m.indPlayers||[])],indPlayerSides:{...(m.indPlayerSides||{})},linkedTeamMatch:false,team1Players:[...(m.team1Players||[])],team2Players:[...(m.team2Players||[])],notes:m.notes||'',courseData:m.courseData||null,selectedTee:m.selectedTee||0,playerTees:{...(m.playerTees||{})}};}
+  if(idx!=null){const m=state.matches[idx];matchDraft={editIdx:idx,format:m.format,totalHoles:m.totalHoles,hdcpPercent:m.hdcpPercent!=null?m.hdcpPercent:100,matchType:m.matchType||'teams',useNet:m.useNet,indPlayers:[...(m.indPlayers||[])],indPlayerSides:{...(m.indPlayerSides||{})},linkedTeamMatch:false,createIndividuals:false,pairings:[],team1Players:[...(m.team1Players||[])],team2Players:[...(m.team2Players||[])],notes:m.notes||'',courseData:m.courseData||null,selectedTee:m.selectedTee||0,playerTees:{...(m.playerTees||{})}};}
   else matchDraft={editIdx:null,format:'fourball',totalHoles:state.settings.holes||18,hdcpPercent:100,matchType:'teams',indPlayers:[],indPlayerSides:{},linkedTeamMatch:false,team1Players:[],team2Players:[],notes:'',courseData:state.settings.courseData||null,selectedTee:0,playerTees:{}};
   renderMatchModal();
 }
@@ -1632,7 +1830,7 @@ function renderMatchModal(){
         <div style="display:flex;align-items:center;gap:7px;width:90px;flex-shrink:0;">
           <span style="width:9px;height:9px;border-radius:50%;background:${ac};flex-shrink:0;"></span>
           <div>
-            <div style="font-size:13px;font-weight:bold;color:var(--blue);line-height:1.2;">${p.name.split(' ')[0]}</div>
+            <div style="font-size:13px;font-weight:bold;color:var(--blue);line-height:1.2;">${p.name}</div>
             <div style="font-size:10px;color:var(--text-muted);">HCP ${p.handicap}</div>
           </div>
         </div>
@@ -1644,7 +1842,7 @@ function renderMatchModal(){
   })():'';
   const fmtDesc=FORMAT_DESC[d.format]||'';
   // Player pickers
-  function chips(ids,color){if(!ids.length)return`<span style="font-size:11px;color:var(--text-dim);font-family:Arial;">None</span>`;return ids.map(id=>{const p=allPlayers.find(pl=>pl.id===id);return p?`<span class="selected-chip" style="background:${color}22;color:${color};border:1px solid ${color}44;">${p.name.split(' ')[0]}</span>`:''}).join('');}
+  function chips(ids,color){if(!ids.length)return`<span style="font-size:11px;color:var(--text-dim);font-family:Arial;">None</span>`;return ids.map(id=>{const p=allPlayers.find(pl=>pl.id===id);return p?`<span class="selected-chip" style="background:${color}22;color:${color};border:1px solid ${color}44;">${p.name}</span>`:''}).join('');}
   function playerPicker(ids,color,name,side){
     if(!ids.length)return'';
     return`<div class="team-section-label" style="color:${color};">${name}</div>`+ids.map(p=>{const sel=d[side+'Players']&&d[side+'Players'].includes(p.id);const ac=AVC[allPlayers.findIndex(pl=>pl.id===p.id)%AVC.length];const init=p.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
@@ -1714,6 +1912,20 @@ function renderMatchModal(){
         ${!isInd?'Players compete as two sides — one score per team per hole (or lowest ball for Four-Ball).':'Each player tracks their own score. Assign players to sides for match play result.'}
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-label">Scoring</label>
+      <div style="display:flex;gap:8px;">
+        <div onclick="draftSet('useNet',false)" style="flex:1;padding:10px 8px;border-radius:var(--radius);border:2px solid ${!d.useNet?'var(--blue)':'var(--border)'};background:${!d.useNet?'rgba(0,39,76,0.08)':'#fff'};cursor:pointer;text-align:center;">
+          <div style="font-size:13px;font-weight:bold;color:${!d.useNet?'var(--blue)':'var(--text-muted)'};">Gross</div>
+        </div>
+        <div onclick="draftSet('useNet',true)" style="flex:1;padding:10px 8px;border-radius:var(--radius);border:2px solid ${d.useNet?'var(--blue)':'var(--border)'};background:${d.useNet?'rgba(0,39,76,0.08)':'#fff'};cursor:pointer;text-align:center;">
+          <div style="font-size:13px;font-weight:bold;color:${d.useNet?'var(--blue)':'var(--text-muted)'};">Net</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);padding:6px 8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-top:4px;">
+        ${d.useNet?'Net scores used — handicap strokes applied per hole for win/loss.':'Gross scores used — raw scores compared with no handicap adjustment.'}
+      </div>
+    </div>
     ${!isInd?`
     <div class="grid-2" style="gap:12px;margin-bottom:12px;">
       <div><label class="form-label" style="color:${state.team1.color};">${state.team1.name} side</label>
@@ -1735,9 +1947,9 @@ function renderMatchModal(){
         </div>
         <div style="flex:1;">
           <div style="font-weight:bold;color:var(--blue);font-size:13px;">Also create Team Match</div>
-          <div style="font-size:11px;color:var(--text-muted);">Individual scores automatically feed into a team match result</div>
+          <div style="font-size:11px;color:var(--text-muted);">Best individual score per side feeds into a linked team match automatically</div>
         </div>
-      </label>
+      </div>
     </div>`}
     ${!isInd&&!isEdit?`<div style="padding:8px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:12px;">
       <div onclick="matchDraft.createIndividuals=!matchDraft.createIndividuals;renderMatchModal();" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:4px 0;">
@@ -1745,12 +1957,25 @@ function renderMatchModal(){
           <div style="position:absolute;top:3px;${d.createIndividuals?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.25);transition:all 0.2s;"></div>
         </div>
         <div style="flex:1;">
-          <div style="font-weight:bold;color:var(--blue);font-size:13px;">Also create Individual matches</div>
-          <div style="font-size:11px;color:var(--text-muted);">One match with all players — scores tracked individually</div>
+          <div style="font-weight:bold;color:var(--blue);font-size:13px;">Also create Individual Match</div>
+          <div style="font-size:11px;color:var(--text-muted);">Each player tracks their own score — best score per side rolls up to this team match</div>
         </div>
-      </label>
+      </div>
     </div>`:''}
-    <div class="form-group"><label class="form-label">Notes</label><input type="text" value="${d.notes||''}" oninput="draftSet('notes',this.value)" placeholder="e.g. Morning wave, Group A"></div>
+    ${!isInd&&!isEdit?`<div class="form-group">
+      <label class="form-label">1v1 Side Matches <span style="font-size:10px;font-weight:normal;color:var(--text-muted);">optional — scores roll up from individual match</span></label>
+      <div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;">
+        ${(d.pairings||[]).length===0?'<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);">None yet</div>':''}
+        ${(d.pairings||[]).map((pair,pi)=>{const p1=state.players.find(p=>p.id===pair[0]);const p2=state.players.find(p=>p.id===pair[1]);return`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(0,39,76,0.06);"><span style="font-size:13px;font-weight:bold;color:var(--blue);">${p1?p1.name:'?'}<span style="color:var(--text-muted);font-weight:normal;"> vs </span>${p2?p2.name:'?'}</span><button onclick="removePairing(${pi})" style="margin-left:auto;background:none;border:none;color:#C0392B;cursor:pointer;font-size:16px;">✕</button></div>`;}).join('')}
+      </div>
+      ${(d.team1Players||[]).concat(d.team2Players||[]).length>=2?`<div style="display:flex;gap:6px;align-items:center;">
+        <select id="pair-p1" style="flex:1;font-size:13px;padding:8px;border:1.5px solid rgba(0,39,76,0.2);border-radius:var(--radius);"><option value="">Player 1</option>${(d.team1Players||[]).concat(d.team2Players||[]).map(id=>{const p=state.players.find(pl=>pl.id===id);return p?`<option value="${id}">${p.name}</option>`:'';}).join('')}</select>
+        <span style="color:var(--text-muted);flex-shrink:0;">vs</span>
+        <select id="pair-p2" style="flex:1;font-size:13px;padding:8px;border:1.5px solid rgba(0,39,76,0.2);border-radius:var(--radius);"><option value="">Player 2</option>${(d.team1Players||[]).concat(d.team2Players||[]).map(id=>{const p=state.players.find(pl=>pl.id===id);return p?`<option value="${id}">${p.name}</option>`:'';}).join('')}</select>
+        <button class="btn btn-sm btn-gold" onclick="addPairing()" style="flex-shrink:0;">+ Add</button>
+      </div>`:'<div style="font-size:11px;color:var(--text-muted);">Add players to both teams first</div>'}
+    </div>`:''}
+    <div class="form-group"><label class="form-label">Notes</label><input type="text" value="${d.notes||''}" onchange="draftSet('notes',this.value)" onblur="draftSet('notes',this.value)" placeholder="e.g. Morning wave, Group A"></div>
     <button class="btn btn-gold w-full" onclick="saveMatch()">${isEdit?'Save Changes':'Create Match'}</button>
   </div>`;render();
 }
@@ -1774,6 +1999,42 @@ function setIndSide(pid,side){
   renderMatchModal();
 }
 function togglePick(pid,side){const a=matchDraft[side+'Players'],i=a.indexOf(pid);if(i>=0)a.splice(i,1);else a.push(pid);renderMatchModal();}
+function toggleComplete(i){
+  mutate(()=>{
+    const m=state.matches[i];
+    m.completedAt=m.completedAt?null:new Date().toISOString();
+    state.matches.forEach(lm=>{
+      if(lm.linkedFrom===m.id||lm.parentIndMatch===m.id){
+        lm.completedAt=m.completedAt;
+      }
+    });
+  });
+  render();
+}
+
+function toggleCountsForTeam(i){
+  mutate(()=>{
+    const m=state.matches[i];
+    m.countsForTeam=m.countsForTeam===false?true:false;
+  });
+  render();
+}
+
+
+function addPairing(){
+  const p1=(document.getElementById('pair-p1')||{}).value;
+  const p2=(document.getElementById('pair-p2')||{}).value;
+  if(!p1||!p2||p1===p2){alert('Select two different players.');return;}
+  if(!matchDraft.pairings) matchDraft.pairings=[];
+  if(matchDraft.pairings.some(p=>p[0]===p1&&p[1]===p2||p[0]===p2&&p[1]===p1)){alert('Pairing already exists.');return;}
+  matchDraft.pairings.push([p1,p2]);
+  renderMatchModal();
+}
+function removePairing(pi){
+  if(matchDraft.pairings) matchDraft.pairings.splice(pi,1);
+  renderMatchModal();
+}
+
 function saveMatch(){
   const d=matchDraft;
   const isInd=d.matchType==='individual';
@@ -1786,13 +2047,14 @@ function saveMatch(){
       matchBets:[]
     };
     if(d.editIdx!=null){
-      // Edit existing
+      // Edit existing — preserve holes (scores already entered)
       const existing=state.matches[d.editIdx];
+      const savedHoles=existing.holes||{};
       Object.assign(existing,base);
+      existing.holes=savedHoles; // restore scores
       if(isInd){
         existing.indPlayers=d.indPlayers||[];
         existing.indPlayerSides=d.indPlayerSides||{};
-        // derive team players from sides
         existing.team1Players=(d.indPlayers||[]).filter(id=>(d.indPlayerSides||{})[id]!=='2');
         existing.team2Players=(d.indPlayers||[]).filter(id=>(d.indPlayerSides||{})[id]==='2');
       } else {
@@ -1801,6 +2063,17 @@ function saveMatch(){
         existing.indPlayers=[];existing.indPlayerSides={};
       }
       existing.matchBets=existing.matchBets||[];
+      // If there's a linked individual match, update its format/handicap too
+      state.matches.forEach(lm=>{
+        if(lm.linkedFrom===existing.id){
+          lm.format=existing.format;
+          lm.hdcpPercent=existing.hdcpPercent;
+          lm.totalHoles=existing.totalHoles;
+          lm.courseData=existing.courseData;
+          lm.selectedTee=existing.selectedTee;
+          lm.playerTees=existing.playerTees;
+        }
+      });
     } else {
       // New match
       const indMatchId='m'+Date.now();
@@ -1838,14 +2111,16 @@ function saveMatch(){
           holes:{}
         });
         // Optionally create ONE multi-player individual match — all players, each plays own ball
+        let indMatchId2=null;
         if(d.createIndividuals){
           const allPids=[...(d.team1Players||[]),...(d.team2Players||[])];
           if(allPids.length>=2){
             const sides={};
             allPids.forEach(id=>{sides[id]=(d.team1Players||[]).includes(id)?'1':'2';});
+            indMatchId2='m'+(Date.now()+1);
             state.matches.push({
-              id:'m'+(Date.now()+1),...base,
-              format:'singles',
+              id:indMatchId2,...base,
+              format:d.format,
               matchType:'individual',
               indPlayers:allPids,
               indPlayerSides:sides,
@@ -1857,6 +2132,30 @@ function saveMatch(){
             });
           }
         }
+        // Create 1v1 linked matches from pairings
+        (d.pairings||[]).forEach((pair,pi)=>{
+          const [pid1,pid2]=pair;
+          const p1=state.players.find(p=>p.id===pid1);
+          const p2=state.players.find(p=>p.id===pid2);
+          if(!p1||!p2) return;
+          const sides={[pid1]:'1',[pid2]:'2'};
+          // Figure out which parent individual match has these players
+          const parentId=indMatchId2||teamMatchId;
+          state.matches.push({
+            id:'m'+(Date.now()+2+pi),...base,
+            format:d.format,
+            matchType:'individual',
+            is1v1:true,
+            indPlayers:[pid1,pid2],
+            indPlayerSides:sides,
+            team1Players:[pid1],
+            team2Players:[pid2],
+            notes:p1.name.split(' ')[0]+' vs '+p2.name.split(' ')[0],
+            linkedFrom:parentId,
+            parentIndMatch:indMatchId2||null,
+            holes:{}
+          });
+        });
       }
     }
   });
@@ -1939,14 +2238,14 @@ function renderTeams(){
   const teams=allTeams();
   const cols=teams.length<=2?'1fr 1fr':teams.length===3?'1fr 1fr 1fr':'1fr 1fr';
   return`<div class="section-header"><span class="section-title">Roster</span>
-    <div style="display:flex;gap:6px;">${state.isHost?`<button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="openAutoTeams()">Auto</button><button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="addExtraTeam()">+ Team</button><button class="btn btn-sm btn-gold" onclick="openPlayerModal(null)">+ Player</button>`:''}</div>
+    <div style="display:flex;gap:6px;"><button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="openAutoTeams()">Auto</button><button class="btn btn-sm btn-ghost" style="color:#fff;border-color:rgba(255,255,255,0.35);" onclick="addExtraTeam()">+ Team</button><button class="btn btn-sm btn-gold" onclick="openPlayerModal(null)">+ Player</button></div>
   </div>
   <div style="display:grid;grid-template-columns:${cols};gap:10px;padding:0 12px;margin-bottom:12px;">
     ${teams.map(t=>`<div class="team-card" style="border:2px solid ${t.color}44;">
       <div style="height:3px;border-radius:2px;background:${t.color};margin-bottom:8px;"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <div style="font-size:13px;font-weight:bold;color:${t.color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${t.name}</div>
-        ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="openEditTeam(${t.idx})" style="flex-shrink:0;font-size:10px;padding:3px 8px;margin-left:4px;">Edit</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="openEditTeam(${t.idx})" style="flex-shrink:0;font-size:10px;padding:3px 8px;margin-left:4px;">Edit</button>
       </div>
       <div style="font-size:26px;font-weight:bold;color:var(--blue);text-align:center;padding:2px 0;">${teamPts(t.idx)}</div>
       <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-bottom:4px;">pts</div>
@@ -1975,7 +2274,7 @@ function renderPRow(p,tn){
 }
 function renderUnassigned(){const a=new Set([...(state.team1.players||[]),...(state.team2.players||[]),...(state.extraTeams||[]).flatMap(t=>t.players||[])]);const ua=state.players.filter(p=>!a.has(p.id));return ua.length?ua.map(p=>renderPRow(p,0)).join(''):`<div class="empty-state" style="padding:12px;">All players assigned.</div>`;}
 function pRecord(pid){let w=0,l=0,h=0;state.matches.forEach(m=>{const i1=(m.team1Players||[]).includes(pid),i2=(m.team2Players||[]).includes(pid);if(!i1&&!i2)return;const r=mResult(m);if(r.winner==='team1'&&i1)w++;else if(r.winner==='team2'&&i2)w++;else if(r.winner==='half')h++;else if(r.winner)l++;});return{w,l,h};}
-function openPlayerModal(eid){if(!state.isHost)return;const p=eid?state.players.find(pl=>pl.id===eid):null;modal=`<div class="modal" onclick="event.stopPropagation()"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">${p?'Edit':'Add'} Player</div><button class="modal-close" onclick="closeModal()">\u2715</button></div><div class="form-group"><label class="form-label">Full Name</label><input type="text" id="p-name" value="${p?p.name:''}" placeholder="John Smith"></div><div class="form-group"><label class="form-label">Handicap Index</label><input type="number" id="p-hdcp" step="0.1" value="${p?p.handicap:10}" min="0" max="54"></div><button class="btn btn-gold w-full" onclick="savePlayer('${eid||''}')">${p?'Save':'Add Player'}</button></div>`;render();}
+function openPlayerModal(eid){const p=eid?state.players.find(pl=>pl.id===eid):null;modal=`<div class="modal" onclick="event.stopPropagation()"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">${p?'Edit':'Add'} Player</div><button class="modal-close" onclick="closeModal()">\u2715</button></div><div class="form-group"><label class="form-label">Full Name</label><input type="text" id="p-name" value="${p?p.name:''}" placeholder="John Smith"></div><div class="form-group"><label class="form-label">Handicap Index</label><input type="number" id="p-hdcp" step="0.1" value="${p?p.handicap:10}" min="0" max="54"></div><button class="btn btn-gold w-full" onclick="savePlayer('${eid||''}')">${p?'Save':'Add Player'}</button></div>`;render();}
 function savePlayer(eid){const name=document.getElementById('p-name').value.trim(),handicap=parseFloat(document.getElementById('p-hdcp').value)||0;if(!name)return;mutate(()=>{if(eid){const i=state.players.findIndex(p=>p.id===eid);if(i>=0)state.players[i]={...state.players[i],name,handicap};}else state.players.push({id:'p'+Date.now(),name,handicap});});modal=null;render();}
 const TEAM_COLORS=[
   {hex:'#E63946',name:'Red'},
@@ -1989,7 +2288,6 @@ const TEAM_COLORS=[
 ];
 
 function openEditTeam(tn){
-  if(!state.isHost)return;
   const t=getTeamByIdx(tn)||state.team1;
   const canDelete=tn>=3;
   const curColor=t.color||TEAM_COLORS[0].hex;
@@ -2165,7 +2463,7 @@ function openPoolSettings(){
             border:2px solid ${isIn?'var(--blue)':'rgba(0,39,76,0.15)'};
             background:${isIn?'var(--blue)':'#fff'};
             color:${isIn?'#fff':'var(--text-muted)'};">
-            ${p.name.split(' ')[0]}
+            ${p.name}
           </div>`;
         }).join('')}
       </div>`:''}
@@ -2201,44 +2499,106 @@ function savePools(){
 }
 
 function calcSettlement(parts,getCount,amountPerWin){
-  // Each person pays equally into the pot, winners get paid per win
-  // Net = (wins * amountPerWin) - (totalPot / numParticipants)
-  const counts={};parts.forEach(pid=>counts[pid]=getCount(pid));
-  const totalWinnings=parts.reduce((s,pid)=>s+counts[pid]*amountPerWin,0);
-  const shareEach=parts.length?totalWinnings/parts.length:0;
-  return parts.map(pid=>{
+  // Each win = collect $amount from EVERY other participant
+  // Net per player = (wins × amount × (n-1)) - (losses_to_others × amount)
+  // Where losses_to_others = sum of other players' wins × amount
+  const validParts=parts.filter(pid=>state.players.find(pl=>pl.id===pid));
+  if(!validParts.length) return[];
+  const n=validParts.length;
+  const counts={};validParts.forEach(pid=>counts[pid]=getCount(pid));
+  return validParts.map(pid=>{
     const p=state.players.find(pl=>pl.id===pid);
-    const earned=counts[pid]*amountPerWin;
-    const net=earned-shareEach;
-    return{pid,name:p?p.name.split(' ')[0]:'?',count:counts[pid],earned,shareEach,net};
+    const myWins=counts[pid];
+    // Earn $amount from each other player for each of my wins
+    const earned=myWins*(n-1)*amountPerWin;
+    // Pay $amount to each other player for each of their wins
+    const paid=validParts.filter(other=>other!==pid).reduce((s,other)=>s+counts[other]*amountPerWin,0);
+    const net=earned-paid;
+    return{pid,name:p?p.name:'?',count:myWins,earned,paid,net};
   }).sort((a,b)=>b.net-a.net);
 }
 
 function settlementSummary(settlements,icon){
-  // Build plain-English "X owes Y $Z" statements
-  const winners=settlements.filter(s=>s.net>0.005);
-  const losers=settlements.filter(s=>s.net<-0.005);
-  if(!winners.length||!losers.length) return'';
+  if(!settlements.length) return'';
   const rows=[];
-  // Clone arrays to avoid mutation
-  const w=winners.map(s=>({...s})), l=losers.map(s=>({...s,net:-s.net}));
-  let wi=0,li=0;
-  while(wi<w.length&&li<l.length){
-    const amt=Math.min(w[wi].net,l[li].net);
-    if(amt>0.005) rows.push(`<div style="display:flex;align-items:center;gap:6px;padding:7px 12px;border-bottom:1px solid rgba(0,39,76,0.05);">
-      <span style="font-size:13px;color:#B71C1C;font-weight:bold;">${l[li].name}</span>
-      <span style="font-size:12px;color:var(--text-muted);">owes</span>
-      <span style="font-size:13px;color:#1B5E20;font-weight:bold;">${w[wi].name}</span>
-      <span style="font-size:14px;font-weight:bold;color:var(--blue);margin-left:auto;">$${amt.toFixed(0)}</span>
-    </div>`);
-    w[wi].net-=amt; l[li].net-=amt;
-    if(w[wi].net<0.005) wi++;
-    if(l[li].net<0.005) li++;
+
+  // Check if we have count-based data (pinnies/birdies/skins) or net-based (CTP with rollover)
+  const hasCountData=settlements.some(s=>s.count>0);
+  const ref=hasCountData?settlements.find(s=>s.paid>0&&settlements.filter(o=>o.pid!==s.pid).reduce((t,o)=>t+o.count,0)>0):null;
+  const othersWins=ref?settlements.filter(o=>o.pid!==ref.pid).reduce((t,o)=>t+o.count,0):0;
+  const amtPerWin=ref&&othersWins>0?ref.paid/othersWins:0;
+
+  if(amtPerWin>0){
+    // Count-based: payer owes payee (payee.count - payer.count) * amtPerWin
+    for(let i=0;i<settlements.length;i++){
+      for(let j=0;j<settlements.length;j++){
+        if(i===j) continue;
+        const payer=settlements[i], payee=settlements[j];
+        const amt=(payee.count - payer.count)*amtPerWin;
+        if(amt>0.005) rows.push(debtRow(payer.name,payee.name,amt));
+      }
+    }
+  } else {
+    // Net-based: use waterfall from net values (winners vs losers)
+    const winners=settlements.filter(s=>s.net>0.005).map(s=>({...s}));
+    const losers=settlements.filter(s=>s.net<-0.005).map(s=>({...s,net:-s.net}));
+    let wi=0,li=0;
+    while(wi<winners.length&&li<losers.length){
+      const amt=Math.min(winners[wi].net,losers[li].net);
+      if(amt>0.005) rows.push(debtRow(losers[li].name,winners[wi].name,amt));
+      winners[wi].net-=amt; losers[li].net-=amt;
+      if(winners[wi].net<0.005) wi++;
+      if(losers[li].net<0.005) li++;
+    }
   }
+
   if(!rows.length) return'';
   return`<div style="border-top:2px solid rgba(0,39,76,0.08);">
     <div style="padding:6px 12px 4px;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);">Settlement</div>
     ${rows.join('')}
+  </div>`;
+}
+
+function debtRow(payerName,payeeName,amt){
+  return`<div style="display:flex;align-items:center;gap:6px;padding:7px 12px;border-bottom:1px solid rgba(0,39,76,0.05);">
+    <span style="font-size:13px;color:#B71C1C;font-weight:bold;">${payerName}</span>
+    <span style="font-size:12px;color:var(--text-muted);">owes</span>
+    <span style="font-size:13px;color:#1B5E20;font-weight:bold;">${payeeName}</span>
+    <span style="font-size:14px;font-weight:bold;color:var(--blue);margin-left:auto;">$${Math.round(amt)}</span>
+  </div>`;
+}
+
+function renderBet(b,i){
+  const fmtLabels={'match_net':'Match Play (Net)','match_gross':'Match Play (Gross)','stroke_net':'Stroke Play (Net)','stroke_gross':'Stroke Play (Gross)','match':'Match Play','stroke':'Stroke Play','custom':'Side Bet'};
+  const fmt=fmtLabels[b.type]||b.type||'Side Bet';
+  const bgColor=(b.type||'').includes('match')?'rgba(0,39,76,0.08)':(b.type||'').includes('stroke')?'rgba(255,203,5,0.12)':'rgba(0,39,76,0.04)';
+  return`<div style="padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.06);">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:bold;color:var(--blue);margin-bottom:4px;">${b.description}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:13px;font-weight:bold;color:${state.team1.color};">${b.bettor}</span>
+          <span style="font-size:11px;color:var(--text-dim);">vs</span>
+          <span style="font-size:13px;font-weight:bold;color:${state.team2.color};">${b.against}</span>
+          <span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${bgColor};color:var(--blue);">${fmt}</span>
+        </div>
+        ${b.notes?`<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">${b.notes}</div>`:''}
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:16px;font-weight:bold;color:var(--blue);">$${b.amount}</div>
+        <div style="font-size:10px;color:var(--text-muted);">per side</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      ${b.settled
+        ?`<span style="font-size:12px;font-weight:bold;padding:4px 10px;border-radius:20px;background:${b.winner==='tie'?'rgba(0,39,76,0.08)':'rgba(46,125,50,0.12)'};color:${b.winner==='tie'?'var(--blue)':'#1B5E20'};">✓ ${b.winner==='tie'?'Tied':b.winner+' wins'}</span>`
+        :`<span style="font-size:11px;color:var(--text-muted);">In play</span>`
+      }
+      <div style="display:flex;gap:6px;">
+        ${!b.settled?`<button class="btn btn-sm btn-gold" onclick="settleBet(${i})">Settle</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="delBet(${i})" style="color:#C0392B;border-color:rgba(192,57,43,0.2);">✕</button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -2249,7 +2609,9 @@ function renderBetting(){
   function participantsOf(key){
     const pool=pools[key];
     if(!pool||!pool.active)return[];
-    return pool.participants&&pool.participants.length>0?pool.participants:allPids;
+    const raw=pool.participants&&pool.participants.length>0?pool.participants:allPids;
+    // Filter out any pids that no longer exist in the player list
+    return raw.filter(pid=>state.players.find(p=>p.id===pid));
   }
 
   // ── Birdies ──
@@ -2261,7 +2623,7 @@ function renderBetting(){
       const count=playerBirdies(pid);
       const winnings=count*(pool.amount||0);
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
-        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</div>
+        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">🐦</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
@@ -2294,7 +2656,7 @@ function renderBetting(){
       const count=skinCounts[pid]||0;
       const winnings=count*(pool.amount||0);
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
-        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</div>
+        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">🏆</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
@@ -2322,7 +2684,7 @@ function renderBetting(){
       const count=playerPinnies(pid);
       const winnings=count*(pool.amount||0);
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
-        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</div>
+        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">🚩</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
@@ -2344,31 +2706,159 @@ function renderBetting(){
   function ctpSection(){
     const pool=pools.ctp;if(!pool||!pool.active)return'';
     const parts=participantsOf('ctp');
+    const amt=pool.amount||0;
+    const {events,pendingCarryover}=ctpResults(amt);
+    const n=parts.length;
+
+    // Per-player net earnings
+    const netByPid={};
+    parts.forEach(pid=>netByPid[pid]=0);
+    events.forEach(({ctp,multiplier})=>{
+      if(!parts.includes(ctp)) return;
+      const potWon=amt*multiplier*(n-1);
+      netByPid[ctp]=(netByPid[ctp]||0)+potWon;
+      parts.forEach(pid=>{if(pid!==ctp) netByPid[pid]=(netByPid[pid]||0)-amt*multiplier;});
+    });
+
     const rows=parts.map(pid=>{
       const p=state.players.find(pl=>pl.id===pid);if(!p)return'';
       const count=playerCTPs(pid);
-      const winnings=count*(pool.amount||0);
+      const earned=netByPid[pid]>0?netByPid[pid]:0;
       return`<div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(0,39,76,0.06);">
-        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name.split(' ')[0]}</div>
+        <div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">${p.name}</div>
         <div style="display:flex;align-items:center;gap:4px;margin-right:16px;">
           <span style="font-size:18px;">⛳</span>
           <span style="font-size:16px;font-weight:bold;color:var(--blue);">${count}</span>
         </div>
-        <div style="font-size:15px;font-weight:bold;color:${winnings>0?'#1B5E20':'var(--text-muted)'};">${winnings>0?'+$'+winnings.toFixed(0):'$0'}</div>
+        <div style="font-size:15px;font-weight:bold;color:${earned>0?'#1B5E20':'var(--text-muted)'};">${earned>0?'+$'+earned.toFixed(0):'$0'}</div>
       </div>`;
     }).join('');
+
+    // Build settlement objects compatible with settlementSummary
+    // settlementSummary uses count & derives amtPerWin from paid/totalOtherWins
+    // For CTP with rollover, just pass net directly and use a sentinel count
+    // Instead, build direct pair debts manually like pinnies
+    const ctpSettlements=parts.map(pid=>{
+      const p=state.players.find(pl=>pl.id===pid);
+      const net=netByPid[pid]||0;
+      // count = number of CTP wins, paid = what they owe others total
+      const myWins=events.filter(e=>e.ctp===pid).reduce((s,e)=>s+e.multiplier,0);
+      const paid=Math.max(0,-net); // total owed by this player
+      const earned=Math.max(0,net);
+      return{pid,name:p?p.name:'?',count:myWins,net,paid,earned};
+    });
+
+    // Pending carryover banner
+    const carryBanner=pendingCarryover>0
+      ?`<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(255,203,5,0.12);border-bottom:1px solid rgba(255,203,5,0.2);">
+          <span style="font-size:16px;">🔄</span>
+          <span style="font-size:12px;font-weight:bold;color:var(--blue);">
+            ${pendingCarryover} unclaimed par 3${pendingCarryover!==1?'s':''} — rolls to next par 3
+            · Next winner collects <b>$${amt*(pendingCarryover+1)}</b> from each player
+          </span>
+        </div>`:'' ;
+
     return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px;">
       <div style="background:var(--blue);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
         <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">⛳</span><span style="font-size:13px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:0.5px;">Closest to Pin</span></div>
-        <span style="font-size:12px;color:var(--maize);">$${pool.amount||0}/CTP · ${parts.length} players</span>
+        <span style="font-size:12px;color:var(--maize);">$${amt}/CTP · ${parts.length} players</span>
       </div>
+      ${carryBanner}
       ${rows||'<div style="padding:12px;font-size:12px;color:var(--text-muted);text-align:center;">No par 3 scores yet</div>'}
-      ${settlementSummary(calcSettlement(parts,pid=>playerCTPs(pid),pool.amount||0),'⛳')}
+      ${settlementSummary(ctpSettlements,'⛳')}
     </div>`;
   }
 
   const anyPoolActive=Object.values(pools).some(p=>p&&p.active);
-  const poolSections=birdiesSection()+skinsSection()+pinniesSection()+ctpSection();
+
+  function combinedSummary(){
+    // Merge ALL pools + settled side bets into one net per player
+    const netByName={}; // keyed by player name for side bets
+
+    function addNet(pid,amt){
+      const p=state.players.find(pl=>pl.id===pid);
+      const key=p?p.name:pid;
+      netByName[key]=(netByName[key]||0)+amt;
+    }
+
+    // Birdies
+    if(pools.birdies&&pools.birdies.active){
+      const bParts=participantsOf('birdies');
+      calcSettlement(bParts,pid=>playerBirdies(pid),pools.birdies.amount||0)
+        .forEach(s=>addNet(s.pid,s.net));
+    }
+
+    // Skins
+    if(pools.skins&&pools.skins.active){
+      const sParts=participantsOf('skins');
+      const skinCounts={};sParts.forEach(pid=>skinCounts[pid]=0);
+      state.matches.forEach((_,mi)=>{calcSkinsWinner(mi).forEach(({pid})=>{if(skinCounts[pid]!=null)skinCounts[pid]++;});});
+      calcSettlement(sParts,pid=>skinCounts[pid]||0,pools.skins.amount||0)
+        .forEach(s=>addNet(s.pid,s.net));
+    }
+
+    // Pinnies
+    if(pools.pinnies&&pools.pinnies.active){
+      const pParts=participantsOf('pinnies');
+      calcSettlement(pParts,pid=>playerPinnies(pid),pools.pinnies.amount||0)
+        .forEach(s=>addNet(s.pid,s.net));
+    }
+
+    // CTP
+    if(pools.ctp&&pools.ctp.active){
+      const ctpParts=participantsOf('ctp');
+      const ctpAmt=pools.ctp.amount||0;
+      const {events:ctpEvts}=ctpResults(ctpAmt);
+      const ctpN=ctpParts.length;
+      ctpEvts.forEach(({ctp,multiplier})=>{
+        if(!ctpParts.includes(ctp)) return;
+        addNet(ctp,ctpAmt*multiplier*(ctpN-1));
+        ctpParts.forEach(pid=>{if(pid!==ctp) addNet(pid,-ctpAmt*multiplier);});
+      });
+    }
+
+    // Settled side bets
+    (state.bets||[]).filter(b=>b.settled&&b.winner!=='tie').forEach(b=>{
+      const amt=b.amount||0;
+      if(!amt) return;
+      // winner collects from loser
+      netByName[b.winner]=(netByName[b.winner]||0)+amt;
+      const loser=b.winner===b.bettor?b.against:b.bettor;
+      netByName[loser]=(netByName[loser]||0)-amt;
+    });
+
+    const names=Object.keys(netByName);
+    if(!names.length) return'';
+    const hasActivity=names.some(n=>Math.abs(netByName[n])>0.005);
+    if(!hasActivity) return'';
+
+    const combined=names.map(name=>({name,net:netByName[name]||0}));
+    const winners=combined.filter(s=>s.net>0.005).sort((a,b)=>b.net-a.net).map(s=>({...s}));
+    const losers=combined.filter(s=>s.net<-0.005).sort((a,b)=>a.net-b.net).map(s=>({...s,net:-s.net}));
+    if(!winners.length||!losers.length) return'';
+    const rows=[];
+    let wi=0,li=0;
+    while(wi<winners.length&&li<losers.length){
+      const amt=Math.min(winners[wi].net,losers[li].net);
+      if(amt>0.005) rows.push(debtRow(losers[li].name,winners[wi].name,amt));
+      winners[wi].net-=amt; losers[li].net-=amt;
+      if(winners[wi].net<0.005) wi++;
+      if(losers[li].net<0.005) li++;
+    }
+    if(!rows.length) return'';
+    return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px;border:2px solid var(--maize);">
+      <div style="background:var(--blue);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;">💰</span>
+          <span style="font-size:13px;font-weight:bold;color:var(--maize);text-transform:uppercase;letter-spacing:0.5px;">Total Settlement</span>
+        </div>
+        <span style="font-size:10px;color:rgba(255,203,5,0.7);">All pools + side bets combined</span>
+      </div>
+      <div style="padding:4px 0;">${rows.join('')}</div>
+    </div>`;
+  }
+
+  const poolSections=birdiesSection()+skinsSection()+pinniesSection()+ctpSection()+combinedSummary();
 
   // Legacy bets
   const bets=state.bets||[];
@@ -2384,7 +2874,7 @@ function renderBetting(){
   return`<div class="section-header">
     <span class="section-title">Betting</span>
     <div style="display:flex;gap:6px;">
-      ${state.isHost?`<button class="btn btn-sm btn-gold" onclick="openPoolSettings()">⚙️ Pools</button><button class="btn btn-sm btn-ghost" onclick="openAddBet()" style="color:#fff;border-color:rgba(255,255,255,0.3);">+ Bet</button>`:''}
+      <button class="btn btn-sm btn-gold" onclick="openPoolSettings()">⚙️ Pools</button><button class="btn btn-sm btn-ghost" onclick="openAddBet()" style="color:#fff;border-color:rgba(255,255,255,0.3);">+ Bet</button>
     </div>
   </div>
   <div style="padding:8px 12px;">
@@ -2392,10 +2882,99 @@ function renderBetting(){
       <div style="font-size:32px;margin-bottom:8px;">💰</div>
       <div style="font-size:15px;font-weight:bold;color:var(--blue);margin-bottom:6px;">No pools active</div>
       <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Tap ⚙️ Pools to set up Birdies, Skins, Pinnies & CTP</div>
-      ${state.isHost?`<button class="btn btn-gold" onclick="openPoolSettings()">⚙️ Set Up Pools</button>`:''}
+      <button class="btn btn-gold" onclick="openPoolSettings()">⚙️ Set Up Pools</button>
     </div>`:(poolSections+betsHTML)}
   </div>`;
 }
+
+function openMatchBetModal(mi){
+  const m=state.matches[mi];
+  const p1=mLabel(m,1), p2=mLabel(m,2);
+  const existing=(state.bets||[]).filter(b=>b.matchRef===m.id);
+
+  modal=`<div class="modal" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:2px solid var(--maize);padding-bottom:10px;">
+      <div>
+        <div class="modal-title">Match Bets</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${p1} vs ${p2}</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    ${existing.length>0?`<div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:6px;">Current Bets</div>
+      ${existing.map((b,bi)=>{
+        const realIdx=(state.bets||[]).indexOf(b);
+        return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(0,39,76,0.04);border-radius:var(--radius);margin-bottom:6px;">
+          <div>
+            <div style="font-size:13px;font-weight:bold;color:var(--blue);">${b.description}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${b.bettor} vs ${b.against} · $${b.amount}/side</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            ${b.settled?`<span style="font-size:11px;font-weight:bold;color:#1B5E20;">✓ ${b.winner}</span>`:`<button class="btn btn-sm btn-gold" onclick="settleBet(${realIdx});closeModal();">Settle</button>`}
+            <button class="btn btn-sm btn-ghost" onclick="delBet(${realIdx});openMatchBetModal(${mi});" style="color:#C0392B;border-color:rgba(192,57,43,0.2);">✕</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`:''}
+
+    <div style="font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:10px;">Add Bets</div>
+    <div class="form-group"><label class="form-label">Amount per bet ($)</label>
+      <input type="number" id="mbet-amt" value="10" min="1" style="font-size:18px;text-align:center;">
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+      <button class="btn btn-ghost w-full" onclick="addMatchBet(${mi},'Front 9','front')" style="font-size:14px;justify-content:space-between;">
+        <span>🏌️ Front 9</span><span style="color:var(--text-muted);font-size:12px;">First 9 holes</span>
+      </button>
+      <button class="btn btn-ghost w-full" onclick="addMatchBet(${mi},'Back 9','back')" style="font-size:14px;justify-content:space-between;">
+        <span>🏌️ Back 9</span><span style="color:var(--text-muted);font-size:12px;">Last 9 holes</span>
+      </button>
+      <button class="btn btn-ghost w-full" onclick="addMatchBet(${mi},'Total','total')" style="font-size:14px;justify-content:space-between;">
+        <span>🏆 Total</span><span style="color:var(--text-muted);font-size:12px;">Full ${m.totalHoles} holes</span>
+      </button>
+      <button class="btn btn-ghost w-full" onclick="addMatchBet(${mi},'Custom','custom')" style="font-size:14px;justify-content:space-between;">
+        <span>✏️ Custom</span><span style="color:var(--text-muted);font-size:12px;">Enter description</span>
+      </button>
+    </div>
+  </div>`;
+  render();
+}
+
+function addMatchBet(mi, label, type){
+  const m=state.matches[mi];
+  const amt=parseFloat((document.getElementById('mbet-amt')||{}).value)||10;
+  const p1=mLabel(m,1), p2=mLabel(m,2);
+  let desc=label;
+  if(type==='custom'){
+    desc=prompt('Bet description:')||label;
+  }
+  const betType=type==='total'?'stroke_net':type==='custom'?'custom':'stroke_net';
+  // For front9/back9 bets, carryover if tied — store carryover flag
+  const isF9=type==='front', isB9=type==='back';
+  mutate(()=>{
+    if(!state.bets) state.bets=[];
+    state.bets.push({
+      id:'b'+Date.now(),
+      type:betType,
+      description:desc+' — '+p1+' vs '+p2,
+      bettor:p1, against:p2,
+      bettorId:(m.team1Players||[])[0]||'',
+      againstId:(m.team2Players||[])[0]||'',
+      amount:amt,
+      baseAmount:amt,
+      notes:FORMATS[m.format]||m.format,
+      settled:false,
+      matchRef:m.id,
+      segment:type,
+      // Front 9 ties carry over to back 9
+      carryoverTo:isF9?'back':null,
+      carryoverFrom:isB9?'front':null,
+    });
+  });
+  pushToCloud();
+  openMatchBetModal(mi);
+}
+
 
 function openAddBet(){
   const allPlayers=state.players;
@@ -2410,9 +2989,11 @@ function openAddBet(){
     </div>
     <div class="form-group"><label class="form-label">Format</label>
       <select id="b-type">
-        <option value="match">Match Play (hole by hole)</option>
-        <option value="stroke">Stroke Play (total score)</option>
-        <option value="custom">Side Bet</option>
+        <option value="match_net">Match Play — Net</option>
+        <option value="match_gross">Match Play — Gross</option>
+        <option value="stroke_net">Stroke Play — Net</option>
+        <option value="stroke_gross">Stroke Play — Gross</option>
+        <option value="custom">Side Bet / Custom</option>
       </select></div>
     <div class="form-group"><label class="form-label">Description</label>
       <input type="text" id="b-desc" placeholder="e.g. Front 9 Match"></div>
@@ -2473,7 +3054,18 @@ function settleBet(i){
 }
 
 function confirmSettle(i,winner){
-  mutate(()=>{state.bets[i].settled=true;state.bets[i].winner=winner;});
+  mutate(()=>{
+    const b=state.bets[i];
+    b.settled=true;b.winner=winner;
+    // Front 9 tie carries pot to back 9
+    if(winner==='tie'&&b.carryoverTo){
+      const back=state.bets.find(ob=>ob.matchRef===b.matchRef&&ob.segment===b.carryoverTo&&!ob.settled);
+      if(back){
+        back.amount=(back.amount||0)+(b.baseAmount||b.amount||0);
+        if(!back.description.includes('(+carry)')) back.description=back.description.replace(' — ',' (+carry) — ');
+      }
+    }
+  });
   modal=null;render();
 }
 
@@ -2523,7 +3115,20 @@ function setSub(s,t){subTab[s]=t;render();}
 function editEventName(){if(!state.isHost)return;const n=prompt('Event name:',state.eventName);if(n){mutate(()=>state.eventName=n);render();}}
 function overlayClick(e){if(e.target.classList.contains('modal-overlay')){modal=null;matchDraft=null;render();}}
 function closeModal(){modal=null;matchDraft=null;render();}
-function delMatch(i){if(!confirm('Delete this match?'))return;state.matches.splice(i,1);save();pushToCloud();render();}
+function delMatch(i){
+  const m=state.matches[i];
+  const name=m?`${FORMATS[m.format]||m.format} — ${mLabel(m,1)} vs ${mLabel(m,2)}`:'this match';
+  if(!confirm('Delete '+name+'?\n\nThis cannot be undone.')) return;
+  // Also delete any linked matches (individual/team children)
+  const linkedIds=state.matches.filter(lm=>lm.linkedFrom===m.id||lm.parentIndMatch===m.id).map(lm=>lm.id);
+  if(linkedIds.length>0){
+    if(!confirm('This will also delete '+linkedIds.length+' linked match'+(linkedIds.length!==1?'es':'')+'. Continue?')) return;
+    mutate(()=>{state.matches=state.matches.filter(lm=>!linkedIds.includes(lm.id)&&lm.id!==m.id);});
+  } else {
+    mutate(()=>{state.matches.splice(state.matches.findIndex(lm=>lm.id===m.id),1);});
+  }
+  save();pushToCloud();render();
+}
 function delBet(i){if(confirm('Delete?')){mutate(()=>state.bets.splice(i,1));render();}}
 function delPlayer(id){if(!state.isHost||!confirm('Remove?'))return;mutate(()=>{state.players=state.players.filter(p=>p.id!==id);state.team1.players=(state.team1.players||[]).filter(p=>p!==id);state.team2.players=(state.team2.players||[]).filter(p=>p!==id);(state.extraTeams||[]).forEach(t=>{t.players=(t.players||[]).filter(p=>p!==id);});});render();}
 function resetApp(){if(!state.isHost){alert('Only the host can reset.');return;}if(!confirm('Reset ALL data?'))return;mutate(()=>{state.matches=[];state.bets=[];state.players=[];state.team1.players=[];state.team2.players=[];});render();}
@@ -2560,6 +3165,15 @@ function updHoleInd(mi,h,pi,inputId,v,par){
 function rollUpToTeamMatch(indMatchIdx, h){
   const ind=state.matches[indMatchIdx];
   if(!ind||!ind.linkedFrom) return;
+
+  // Also roll up 1v1 matches that are linked to this individual match
+  if(!ind.is1v1){
+    state.matches.forEach((m,mi)=>{
+      if(m.is1v1&&(m.linkedFrom===ind.id||m.parentIndMatch===ind.id)){
+        rollUp1v1FromInd(mi,ind,h);
+      }
+    });
+  }
   // Find the parent team match
   const teamIdx=state.matches.findIndex(m=>m.id===ind.linkedFrom);
   if(teamIdx<0) return;
@@ -2579,8 +3193,11 @@ function rollUpToTeamMatch(indMatchIdx, h){
   const t1pids=team.team1Players||[];
   const t2pids=team.team2Players||[];
 
-  function bestNet(sidePids){
-    let best=null;
+  // For Four-Ball/Best Ball: use BEST net score per team
+  // For other formats: use combined (sum) net score
+  const isBestBall=['fourball','bestball'].includes((ind.format||team.format||'').toLowerCase());
+  function bestOrCombinedNet(sidePids){
+    let best=null, combined=null;
     sidePids.forEach(pid=>{
       const pi=pids.indexOf(pid);
       if(pi<0) return;
@@ -2588,34 +3205,54 @@ function rollUpToTeamMatch(indMatchIdx, h){
       if(raw==null) return;
       const net=raw-strokesOn(diffs[pi],si,ind.totalHoles);
       if(best===null||net<best) best=net;
+      combined=(combined||0)+net;
     });
-    return best;
+    return isBestBall?best:combined;
   }
 
-  function bestRaw(sidePids){
-    let best=null;
-    sidePids.forEach(pid=>{
-      const pi=pids.indexOf(pid);
-      if(pi<0) return;
-      const raw=hd['p'+pi];
-      if(raw==null) return;
-      if(best===null||raw<best) best=raw;
-    });
-    return best;
-  }
-
-  // Use best raw score for the team scorecard display,
-  // but win/loss calculation uses net (handled by hDiff on team match)
-  const t1best=bestRaw(t1pids);
-  const t2best=bestRaw(t2pids);
+  const t1net=bestOrCombinedNet(t1pids);
+  const t2net=bestOrCombinedNet(t2pids);
 
   if(!team.holes[h]) team.holes[h]={par:coursePar};
   team.holes[h].par=coursePar;
-  if(t1best!==null) team.holes[h].t1=t1best;
+  // Store combined net — team match win/loss compares these directly (no extra hDiff needed)
+  if(t1net!==null) team.holes[h].t1=t1net;
   else delete team.holes[h].t1;
-  if(t2best!==null) team.holes[h].t2=t2best;
+  if(t2net!==null) team.holes[h].t2=t2net;
   else delete team.holes[h].t2;
 }
+
+function rerollAllHoles(indMatchIdx){
+  const m=state.matches[indMatchIdx];
+  if(!m) return;
+  const holes=matchHoles(m);
+  holes.forEach(h=>rollUpToTeamMatch(indMatchIdx,h));
+  save();pushToCloud();render();
+}
+
+
+function rollUp1v1FromInd(matchIdx, indMatch, h){
+  // Copy the two 1v1 players' scores from the parent individual match
+  const m=state.matches[matchIdx];
+  if(!m||!m.is1v1) return;
+  const pids=m.indPlayers||[];
+  if(pids.length!==2) return;
+  const indHd=(indMatch.holes||{})[h];if(!indHd) return;
+  const indPids=indMatch.indPlayers||[];
+
+  if(!m.holes[h]) m.holes[h]={};
+  const ch=(indMatch.courseData||state.settings.courseData)?.holes?.[h-1];
+  if(ch) m.holes[h].par=ch.par;
+
+  pids.forEach((pid,pi)=>{
+    const indPi=indPids.indexOf(pid);
+    if(indPi<0) return;
+    const raw=indHd['p'+indPi];
+    if(raw!=null) m.holes[h]['p'+pi]=raw;
+    else delete m.holes[h]['p'+pi];
+  });
+}
+
 
 function togglePinnie(mi,h,pid,add,btn){
   const m=state.matches[mi];
@@ -2793,7 +3430,20 @@ async function doCSrch(fs){
     el.innerHTML='<div style="font-size:11px;color:var(--text-muted);font-family:Arial;margin-bottom:6px;">'+courses.length+' result'+(courses.length!==1?'s':'')+' — tap to select</div>'
       +'<div style="background:#fff;border-radius:var(--radius);overflow:hidden;border:1px solid rgba(0,39,76,0.12);max-height:320px;overflow-y:auto;">'
       +courses.map(c=>{
-        const loc=[c.city,c.state_name||c.country].filter(Boolean).join(', ');
+        // Parse location — may be a string, object, or nested object
+        let _city='',_state='',_country='';
+        try{
+          const raw=c.location;
+          const _loc=typeof raw==='string'?JSON.parse(raw):(raw&&typeof raw==='object'?raw:{});
+          _city=_loc.city||_loc.City||'';
+          _state=_loc.state_name||_loc.state||_loc.State||_loc.province||'';
+          _country=_loc.country||_loc.Country||'';
+        }catch(e){
+          _city=typeof c.city==='string'?c.city:'';
+          _state=typeof c.state_name==='string'?c.state_name:typeof c.state==='string'?c.state:'';
+          _country=typeof c.country==='string'?c.country:'';
+        }
+        const loc=[_city,_state,_country].filter(Boolean).join(', ');
         // tees can be {male:[...], female:[...]} or a flat array
         const maleTees=c.tees?(Array.isArray(c.tees)?c.tees:(c.tees.male||[])):[];
         const par=maleTees.length&&maleTees[0].par_total?maleTees[0].par_total:'';
