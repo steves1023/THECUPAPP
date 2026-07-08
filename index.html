@@ -3424,11 +3424,19 @@ async function doCSrch(fs){
     el.innerHTML='<div style="font-size:11px;color:var(--text-muted);font-family:Arial;margin-bottom:6px;">'+courses.length+' result'+(courses.length!==1?'s':'')+' — tap to select</div>'
       +'<div style="background:#fff;border-radius:var(--radius);overflow:hidden;border:1px solid rgba(0,39,76,0.12);max-height:320px;overflow-y:auto;">'
       +courses.map(c=>{
-        // golfcourseapi.com nests location data under c.location object
-        const _loc=c.location||{};
-        const _city=typeof c.city==='string'?c.city:(typeof _loc.city==='string'?_loc.city:'');
-        const _state=typeof c.state_name==='string'?c.state_name:(typeof _loc.state_name==='string'?_loc.state_name:(typeof _loc.state==='string'?_loc.state:''));
-        const _country=typeof c.country==='string'?c.country:(typeof _loc.country==='string'?_loc.country:'');
+        // Parse location — may be a string, object, or nested object
+        let _city='',_state='',_country='';
+        try{
+          const raw=c.location;
+          const _loc=typeof raw==='string'?JSON.parse(raw):(raw&&typeof raw==='object'?raw:{});
+          _city=_loc.city||_loc.City||'';
+          _state=_loc.state_name||_loc.state||_loc.State||_loc.province||'';
+          _country=_loc.country||_loc.Country||'';
+        }catch(e){
+          _city=typeof c.city==='string'?c.city:'';
+          _state=typeof c.state_name==='string'?c.state_name:typeof c.state==='string'?c.state:'';
+          _country=typeof c.country==='string'?c.country:'';
+        }
         const loc=[_city,_state,_country].filter(Boolean).join(', ');
         // tees can be {male:[...], female:[...]} or a flat array
         const maleTees=c.tees?(Array.isArray(c.tees)?c.tees:(c.tees.male||[])):[];
