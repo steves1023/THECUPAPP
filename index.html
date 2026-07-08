@@ -1006,62 +1006,56 @@ function updSessionScore(si,h,gi,v,par){
 function renderScoreboard(){
   const t1=teamPts(1),t2=teamPts(2);
   const ptw=state.settings.pointsToWin||null;
-  const totalM=state.matches.filter(m=>!m.linkedFrom).length;
-  const defaultNeed=totalM>0?parseFloat((totalM/2+0.5).toFixed(1)):14.5;
+  const totalMatches=state.matches.filter(m=>countsForTeamScore(m)&&!m.linkedFrom).length;
+  // Default needed: majority of total possible points
+  const defaultNeed=totalMatches>0?(totalMatches/2+0.5).toFixed(1):'—';
   const needDisplay=ptw||defaultNeed;
-  const t1wins=t1>=needDisplay;
-  const t2wins=t2>=needDisplay;
-  const doneCount=state.matches.filter(m=>m.completedAt&&!m.linkedFrom).length;
-  const c1=t1wins?'#FFD700':state.team1.color;
-  const c2=t2wins?'#FFD700':state.team2.color;
-  const stripes=Array(8).fill('').map((_,i)=>'<div style="position:absolute;top:0;bottom:0;left:'+(10+i*12)+'%;width:1px;background:rgba(255,255,255,0.12);"></div>').join('');
-  const stripesR=Array(8).fill('').map((_,i)=>'<div style="position:absolute;top:0;bottom:0;right:'+(10+i*12)+'%;width:1px;background:rgba(255,255,255,0.12);"></div>').join('');
-  const sb='<div style="background:var(--blue);padding:0;">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 0;">'+
-      '<div style="display:flex;align-items:center;gap:6px;">'+
-        '<span style="font-size:13px;font-weight:bold;color:'+c1+';">'+(t1wins?'\u2713 ':'')+needDisplay+'</span>'+
-        '<span style="font-size:10px;color:rgba(255,255,255,0.5);">to win</span>'+
-      '</div>'+
-      '<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:1px;">Points</div>'+
-      '<div style="display:flex;align-items:center;gap:6px;">'+
-        '<span style="font-size:10px;color:rgba(255,255,255,0.5);">to win</span>'+
-        '<span style="font-size:13px;font-weight:bold;color:'+c2+';">'+needDisplay+(t2wins?' \u2713':'')+'</span>'+
-      '</div>'+
-    '</div>'+
-    '<div style="display:flex;align-items:stretch;margin:8px 0 0;min-height:90px;">'+
-      '<div style="flex:1;background:'+state.team1.color+';display:flex;align-items:center;padding:12px 16px;gap:12px;position:relative;overflow:hidden;">'+
-        (t1wins?'<span style="font-size:28px;position:absolute;right:12px;top:8px;z-index:1;">\u{1F3C6}</span>':'')+
-        stripes+
-        '<div style="font-size:72px;font-weight:900;color:#fff;line-height:1;font-family:Arial,sans-serif;position:relative;z-index:1;">'+t1+'</div>'+
-        '<div style="position:relative;z-index:1;">'+
-          '<div style="font-size:13px;font-weight:bold;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:1px;">'+state.team1.name+'</div>'+
-          '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:2px;">points</div>'+
-        '</div>'+
-      '</div>'+
-      '<div style="width:4px;background:var(--blue);flex-shrink:0;"></div>'+
-      '<div style="flex:1;background:'+state.team2.color+';display:flex;align-items:center;justify-content:flex-end;padding:12px 16px;gap:12px;position:relative;overflow:hidden;">'+
-        (t2wins?'<span style="font-size:28px;position:absolute;left:12px;top:8px;z-index:1;">\u{1F3C6}</span>':'')+
-        stripesR+
-        '<div style="position:relative;z-index:1;text-align:right;">'+
-          '<div style="font-size:13px;font-weight:bold;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:1px;">'+state.team2.name+'</div>'+
-          '<div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:2px;">points</div>'+
-        '</div>'+
-        '<div style="font-size:72px;font-weight:900;color:#fff;line-height:1;font-family:Arial,sans-serif;position:relative;z-index:1;">'+t2+'</div>'+
-      '</div>'+
-    '</div>'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 10px;">'+
-      '<div style="font-size:11px;color:rgba(255,255,255,0.5);">'+(totalM>0?(doneCount+'/'+totalM+' matches complete'):'')+'</div>'+
-      '<div style="display:flex;align-items:center;gap:6px;">'+
-        '<button onclick="adjustPtw(-0.5)" style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;cursor:pointer;line-height:1;">&minus;</button>'+
-        '<span style="font-size:10px;color:rgba(255,255,255,0.5);">pts to win</span>'+
-        '<button onclick="adjustPtw(0.5)" style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:14px;cursor:pointer;line-height:1;">+</button>'+
-      '</div>'+
-    '</div>'+
-  '</div>';
-  const mhdr='<div class="section-header" style="margin-top:8px;"><span class="section-title">'+(state.matches.filter(m=>!m.completedAt).length>0?'Live Matches':'Matches')+'</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>'+(state.matches.length===0?'<div class="empty-state">No matches yet. Tap + Match to begin.</div>':'')+renderGroupedMatches();
-  return sb+mhdr;
+  const t1wins=ptw?t1>=ptw:false;
+  const t2wins=ptw?t2>=ptw:false;
+
+  return`<div style="padding:12px;">
+    <div style="display:flex;gap:8px;align-items:stretch;">
+      <!-- Team 1 -->
+      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${t1wins?'#FFD700':state.team1.color};background:#fff;${t1wins?'box-shadow:0 0 0 3px rgba(255,215,0,0.4);':''}position:relative;">
+        ${t1wins?`<div style="position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:28px;line-height:1;z-index:2;">🏆</div>`:''}
+        <div style="background:${state.team1.color};padding:${t1wins?'18px':'6px'} 10px 6px;text-align:center;">
+          <div style="font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:Arial;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${state.team1.name}</div>
+        </div>
+        <div style="padding:10px;text-align:center;">
+          <div style="font-size:44px;font-weight:bold;line-height:1;color:${t1wins?'#B8860B':'var(--blue)'};">${t1}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">${t1wins?'🥇 WINNER':'points'}</div>
+        </div>
+      </div>
+      <!-- Middle -->
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:64px;gap:4px;">
+        <div style="font-size:10px;color:var(--text-dim);font-family:Arial;text-transform:uppercase;letter-spacing:0.5px;">Need</div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button onclick="adjustPtw(-0.5)" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,39,76,0.2);background:#fff;color:var(--blue);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">−</button>
+          <div style="font-size:18px;font-weight:bold;color:var(--blue);min-width:36px;text-align:center;">${needDisplay}</div>
+          <button onclick="adjustPtw(0.5)" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,39,76,0.2);background:#fff;color:var(--blue);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">+</button>
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);font-family:Arial;">to win</div>
+      </div>
+      <!-- Team 2 -->
+      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${t2wins?'#FFD700':state.team2.color};background:#fff;${t2wins?'box-shadow:0 0 0 3px rgba(255,215,0,0.4);':''}position:relative;">
+        ${t2wins?`<div style="position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:28px;line-height:1;z-index:2;">🏆</div>`:''}
+        <div style="background:${state.team2.color};padding:${t2wins?'18px':'6px'} 10px 6px;text-align:center;">
+          <div style="font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:Arial;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${state.team2.name}</div>
+        </div>
+        <div style="padding:10px;text-align:center;">
+          <div style="font-size:44px;font-weight:bold;line-height:1;color:${t2wins?'#B8860B':'var(--blue)'};">${t2}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">${t2wins?'🥇 WINNER':'points'}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header"><span class="section-title">${state.matches.filter(m=>!m.completedAt).length>0?'Live Matches':'Matches'}</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>
+  ${state.matches.length===0?`<div class="empty-state">No matches yet. Tap + Match to begin.</div>`:''}
+  ${renderGroupedMatches()}`;
 }
 
+/* \u2550\u2550\u2550 MATCH CARD \u2550\u2550\u2550 */
 function renderMatchCard(m,i){
   const res=mResult(m),t1l=mLabel(m,1),t2l=mLabel(m,2);
   const isIndMatch=m.matchType==='individual';
