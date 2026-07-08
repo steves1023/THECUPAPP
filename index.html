@@ -1050,29 +1050,7 @@ function renderScoreboard(){
     </div>
   </div>
 
-  <!-- Points Progress Bar -->
-  ${(()=>{
-    const _tot=Math.max(t1+t2,parseFloat(needDisplay)*2,1);
-    const _t1p=Math.min(100,Math.round((t1/_tot)*100));
-    const _t2p=Math.min(100,Math.round((t2/_tot)*100));
-    const _mp=Math.min(99,Math.round((parseFloat(needDisplay)/_tot)*100));
-    return '<div style="padding:0 12px 12px;">'+
-      '<div style="background:rgba(0,39,76,0.06);border-radius:20px;height:28px;position:relative;overflow:hidden;">'+
-        '<div style="position:absolute;left:0;top:0;bottom:0;width:'+_t1p+'%;background:'+state.team1.color+';border-radius:20px 0 0 20px;transition:width 0.4s;display:flex;align-items:center;padding-left:10px;overflow:hidden;">'+
-          (_t1p>12?'<span style="font-size:11px;font-weight:bold;color:#fff;white-space:nowrap;">'+state.team1.name+' '+t1+'</span>':'')+
-        '</div>'+
-        '<div style="position:absolute;right:0;top:0;bottom:0;width:'+_t2p+'%;background:'+state.team2.color+';border-radius:0 20px 20px 0;transition:width 0.4s;display:flex;align-items:center;justify-content:flex-end;padding-right:10px;overflow:hidden;">'+
-          (_t2p>12?'<span style="font-size:11px;font-weight:bold;color:#fff;white-space:nowrap;">'+t2+' '+state.team2.name+'</span>':'')+
-        '</div>'+
-        '<div style="position:absolute;top:2px;bottom:2px;left:'+_mp+'%;width:2px;background:rgba(0,39,76,0.3);transform:translateX(-1px);"></div>'+
-      '</div>'+
-      '<div style="display:flex;justify-content:space-between;margin-top:4px;padding:0 4px;">'+
-        '<span style="font-size:10px;color:var(--text-muted);">0</span>'+
-        '<span style="font-size:10px;color:var(--text-muted);">Need '+needDisplay+' to win</span>'+
-        '<span style="font-size:10px;color:var(--text-muted);">'+Math.round(parseFloat(needDisplay)*2)+'</span>'+
-      '</div>'+
-    '</div>';
-  })()}
+
 
   <div class="section-header"><span class="section-title">${state.matches.filter(m=>!m.completedAt).length>0?'Live Matches':'Matches'}</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>
   ${state.matches.length===0?`<div class="empty-state">No matches yet. Tap + Match to begin.</div>`:''}
