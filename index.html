@@ -488,17 +488,19 @@ function avgHT(ids){if(!ids||!ids.length)return'\u2014';return(ids.reduce((a,id)
 
 /* \u2550\u2550\u2550 RENDER \u2550\u2550\u2550 */
 function render(){
+  try{
   if(!state.roomCode){renderJoinScreen();return;}
   // Always reroll individual scores to linked team matches on every render
   state.matches.forEach((m,mi)=>{
-    if(m.matchType==='individual'&&m.linkedFrom){
-      matchHoles(m).forEach(h=>rollUpToTeamMatch(mi,h));
-    }
-    // Roll up 1v1 matches from their parent individual match
-    if(m.is1v1&&m.parentIndMatch){
-      const parent=state.matches.find(pm=>pm.id===m.parentIndMatch);
-      if(parent) matchHoles(parent).forEach(h=>rollUp1v1FromInd(mi,parent,h));
-    }
+    try{
+      if(m.matchType==='individual'&&m.linkedFrom){
+        matchHoles(m).forEach(h=>rollUpToTeamMatch(mi,h));
+      }
+      if(m.is1v1&&m.parentIndMatch){
+        const parent=state.matches.find(pm=>pm.id===m.parentIndMatch);
+        if(parent) matchHoles(parent).forEach(h=>rollUp1v1FromInd(mi,parent,h));
+      }
+    }catch(e){console.error('[rollup error] match',mi,e);}
   });
   document.getElementById('app').innerHTML=`
     <div class="topbar">
@@ -519,6 +521,11 @@ function render(){
     ${modal?`<div class="modal-overlay" onclick="overlayClick(event)">${modal}</div>`:''}
   `;
   renderSyncBar();
+  }catch(e){
+    console.error('[render error]',e);
+    const el=document.getElementById('app');
+    if(el) el.innerHTML='<div style="padding:20px;color:#B71C1C;font-family:monospace;font-size:12px;background:#fff;white-space:pre-wrap;"><b>App Error:</b>\n'+e.message+'\n\n'+e.stack+'</div>';
+  }
 }
 
 function renderJoinScreen(){
