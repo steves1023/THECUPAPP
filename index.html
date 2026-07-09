@@ -511,7 +511,7 @@ function render(){
         </div>
       </div>
       <div class="nav-tabs">
-        ${['scoreboard','matches','sessions','teams','betting','stats','history'].map(t=>`<div class="nav-tab ${tab===t?'active':''}" onclick="setTab('${t}')">${t[0].toUpperCase()+t.slice(1)}</div>`).join('')}
+        ${['scoreboard','matches','teams','betting','stats','history'].map(t=>`<div class="nav-tab ${tab===t?'active':''}" onclick="setTab('${t}')">${t[0].toUpperCase()+t.slice(1)}</div>`).join('')}
       </div>
     </div>
     <div id="sync-bar" class="sync-bar"></div>
@@ -550,7 +550,7 @@ function renderTab(){
   if(tab==='betting')return renderBetting();
   if(tab==='stats')return renderStats();
   if(tab==='history')return renderHistory();
-  if(tab==='sessions')return renderSessions();
+
   return'';
 }
 
