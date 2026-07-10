@@ -338,31 +338,64 @@ function renderScrambleLeaderboard(){
   // Build leaderboard from scrambleScores per team
   const entries=allT.map(t=>{
     const scores=state.scrambleScores[t.idx]||{};
-    let total=0,holes=0;
-    Object.entries(scores).forEach(([h,s])=>{if(s!=null){total+=s;holes++;}});
-    const playedPar=courseHoles.slice(0,holes).reduce((s,h)=>s+(h.par||4),0)||(holes*4);
+    let total=0,holes=0,playedPar=0;
+    Object.entries(scores).forEach(([h,s])=>{
+      if(s!=null){
+        const hNum=parseInt(h);
+        const ch=courseHoles[hNum-1];
+        const par=ch?ch.par:4;
+        total+=s; playedPar+=par; holes++;
+      }
+    });
     const vp=holes>0?total-playedPar:null;
-    return{t,scores,total,holes,vp};
+    return{t,scores,total,holes,vp,playedPar};
   });
 
   const started=entries.filter(e=>e.holes>0).sort((a,b)=>a.vp-b.vp);
   const notStarted=entries.filter(e=>e.holes===0);
 
 
+  // Inline scorecard for leaderboard
+  function inlineScorecard(e){
+    const totalHoles=state.settings.holes||18;
+    const allHoles=Array.from({length:totalHoles},(_,i)=>i+1);
+    const cells=allHoles.map(h=>{
+      const s=e.scores[h];
+      const ch=courseHoles[h-1];
+      const par=ch?ch.par:4;
+      const d=s!=null?s-par:null;
+      let bg='transparent',bdr='transparent',col='rgba(0,39,76,0.25)',shape='border-radius:3px;';
+      if(s!=null){
+        col='var(--blue)';
+        if(d<=-2){bg='#e8f5e9';bdr='#1B5E20';col='#1B5E20';shape='border-radius:50%;outline:1.5px solid #1B5E20;outline-offset:1px;';}
+        else if(d===-1){bg='#e8f5e9';bdr='#2E7D32';col='#1B5E20';shape='border-radius:50%;';}
+        else if(d===1){bg='#fde8e8';bdr='#C0392B';col='#C0392B';shape='border-radius:3px;';}
+        else if(d>=2){bg='#fde8e8';bdr='#8B0000';col='#8B0000';shape='border-radius:3px;outline:1.5px solid #8B0000;outline-offset:1px;';}
+      }
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:1px;min-width:20px;">'+
+        '<span style="font-size:7px;color:rgba(0,39,76,0.3);line-height:1;">'+h+'</span>'+
+        '<div style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;color:'+col+';background:'+bg+';border:1.5px solid '+bdr+';'+shape+'">'+
+          (s!=null?s:'')+'</div>'+
+      '</div>';
+    }).join('');
+    return '<div style="display:flex;gap:3px;padding:6px 12px 10px;flex-wrap:nowrap;overflow-x:auto;">'+cells+'</div>';
+  }
+
   const rows=started.map((e,pos)=>{
     const vpStr=e.vp===0?'E':e.vp>0?('+'+e.vp):(''+e.vp);
     const vpColor=e.vp<0?'#1B5E20':e.vp>0?'#B71C1C':'var(--blue)';
     const medal=pos===0?'🥇':pos===1?'🥈':pos===2?'🥉':(pos+1);
     return '<div style="border-bottom:2px solid rgba(0,39,76,0.08);background:'+(pos===0?'rgba(255,203,5,0.04)':'#fff')+';">'+
-      '<div style="display:flex;align-items:center;padding:10px 16px;gap:12px;">'+
+      '<div style="display:flex;align-items:center;padding:10px 16px;gap:10px;">'+
         '<div style="font-size:14px;font-weight:bold;color:var(--blue);min-width:28px;">'+medal+'</div>'+
         '<div style="width:10px;height:10px;border-radius:50%;background:'+e.t.color+';flex-shrink:0;"></div>'+
         '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+e.t.name+'</div>'+
-      (state.myTeamIdx===e.t.idx?'<button onclick="promptRenameTeam('+e.t.idx+')" style="font-size:12px;padding:2px 6px;border-radius:8px;border:1px solid rgba(0,39,76,0.15);background:rgba(0,39,76,0.04);color:var(--text-muted);cursor:pointer;" title="Rename">✏️ Rename</button>':'')+
-        '<div style="font-size:11px;color:var(--text-muted);margin-right:8px;">Thru '+e.holes+'</div>'+
-        '<div style="font-size:18px;font-weight:bold;color:'+vpColor+';min-width:40px;text-align:right;">'+vpStr+'</div>'+
-        (state.myTeamIdx===e.t.idx?'<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;margin-left:6px;">✏️</button>':state.myTeamIdx==null?'<button class="btn btn-sm btn-ghost" onclick="qrLockMsg()" style="padding:4px 8px;margin-left:6px;font-size:10px;color:rgba(0,39,76,0.4);">🔒</button>':'')+
+        (state.myTeamIdx===e.t.idx?'<button onclick="promptRenameTeam('+e.t.idx+')" style="font-size:11px;padding:2px 6px;border-radius:8px;border:1px solid rgba(0,39,76,0.15);background:rgba(0,39,76,0.04);color:var(--text-muted);cursor:pointer;">✏️</button>':'')+
+        '<div style="font-size:11px;color:var(--text-muted);">Thru '+e.holes+'</div>'+
+        '<div style="font-size:20px;font-weight:bold;color:'+vpColor+';min-width:40px;text-align:right;">'+vpStr+'</div>'+
+        (state.myTeamIdx===e.t.idx?'<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;">✏️ Scores</button>':state.myTeamIdx==null?'<button class="btn btn-sm btn-ghost" onclick="qrLockMsg()" style="padding:4px 8px;font-size:10px;color:rgba(0,39,76,0.4);">🔒</button>':'')+
       '</div>'+
+      inlineScorecard(e)+
     '</div>';
   }).join('');
 
