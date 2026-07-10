@@ -402,6 +402,7 @@ function renderScrambleLeaderboard(){
         '<div style="font-size:14px;font-weight:bold;color:var(--blue);min-width:28px;">'+medal+'</div>'+
         '<div style="width:10px;height:10px;border-radius:50%;background:'+e.t.color+';flex-shrink:0;"></div>'+
         '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+e.t.name+'</div>'+
+      (state.myTeamIdx===e.t.idx?'<button onclick="promptRenameTeam('+e.t.idx+')" style="font-size:12px;padding:2px 6px;border-radius:8px;border:1px solid rgba(0,39,76,0.15);background:rgba(0,39,76,0.04);color:var(--text-muted);cursor:pointer;" title="Rename">✏️ Rename</button>':'')+
         '<div style="font-size:11px;color:var(--text-muted);margin-right:8px;">Thru '+e.holes+'</div>'+
         '<div style="font-size:18px;font-weight:bold;color:'+vpColor+';min-width:40px;text-align:right;">'+vpStr+'</div>'+
         (state.myTeamIdx==null||state.myTeamIdx===e.t.idx?'<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;margin-left:6px;">✏️</button>':'')+
@@ -414,6 +415,7 @@ function renderScrambleLeaderboard(){
     '<div style="font-size:14px;font-weight:bold;color:var(--text-muted);min-width:28px;">—</div>'+
     '<div style="width:10px;height:10px;border-radius:50%;background:'+e.t.color+';flex-shrink:0;"></div>'+
     '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+e.t.name+'</div>'+
+      (state.myTeamIdx===e.t.idx?'<button onclick="promptRenameTeam('+e.t.idx+')" style="font-size:12px;padding:2px 6px;border-radius:8px;border:1px solid rgba(0,39,76,0.15);background:rgba(0,39,76,0.04);color:var(--text-muted);cursor:pointer;" title="Rename">✏️ Rename</button>':'')+
     '<div style="font-size:11px;color:var(--text-muted);flex:1;">Not started</div>'+
     (state.myTeamIdx==null||state.myTeamIdx===e.t.idx?'<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;">✏️</button>':'')+
   '</div>').join('');
@@ -434,7 +436,7 @@ function renderScrambleLeaderboard(){
     courseBar+
     '<div style="background:var(--blue);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;margin-top:8px;">'+
       '<div style="font-size:13px;font-weight:bold;color:var(--maize);text-transform:uppercase;letter-spacing:1px;">🏌️ Live Leaderboard</div>'+
-      '<div style="font-size:11px;color:rgba(255,255,255,0.6);">Score vs Par</div>'+
+      '<button onclick="renderTeamPicker()" style="font-size:10px;padding:3px 8px;border-radius:10px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;cursor:pointer;">'+(state.myTeamIdx!=null?'Switch Team':'Pick Team')+'</button>'+
     '</div>'+
     '<div style="background:#fff;border-radius:0 0 var(--radius-lg) var(--radius-lg);overflow:hidden;border:1px solid var(--border);border-top:none;">'+
       '<div style="display:flex;padding:6px 16px;background:rgba(0,39,76,0.04);border-bottom:2px solid var(--maize);">'+
@@ -805,7 +807,13 @@ function renderJoinScreen(){
 
 function renderTab(){
   if(tab==='scoreboard'){
-    if(state.eventType==='scramble') return renderScrambleLeaderboard();
+    if(state.eventType==='scramble'){
+      // Show team picker inline if not yet selected and teams exist
+      if(state.myTeamIdx==null&&allTeams().some(t=>t.players&&t.players.length>0)){
+        renderTeamPicker(); return '';
+      }
+      return renderScrambleLeaderboard();
+    }
     return renderScoreboard();
   }
   if(tab==='matches')return renderMatches();
@@ -863,7 +871,12 @@ async function createRoom(){
     eventPassword:'',_completedOpen:false
   };
   save();
-  await pushToCloud();subscribeToRoom(newCode);render();
+  await pushToCloud();subscribeToRoom(newCode);
+  if(state.eventType==='scramble'&&allTeams().filter(t=>t.players&&t.players.length>0).length>0){
+    renderTeamPicker();
+  } else {
+    render();
+  }
 }
 async function joinRoom(){
   const joinEventName=((document.getElementById('j-join-event')||{}).value||'').trim();
@@ -896,19 +909,35 @@ async function joinRoom(){
 function renderTeamPicker(){
   const teams=allTeams();
   const teamBtns=teams.map(t=>
-    '<button onclick="selectMyTeam('+t.idx+')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:var(--radius);border:2px solid '+t.color+';background:#fff;cursor:pointer;width:100%;text-align:left;margin-bottom:8px;">'+
-      '<div style="width:14px;height:14px;border-radius:50%;background:'+t.color+';flex-shrink:0;"></div>'+
-      '<span style="font-size:15px;font-weight:bold;color:var(--blue);">'+t.name+'</span>'+
-    '</button>'
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'+
+      '<button onclick="selectMyTeam('+t.idx+')" style="flex:1;display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:var(--radius);border:2px solid '+t.color+';background:#fff;cursor:pointer;text-align:left;">'+
+        '<div style="width:14px;height:14px;border-radius:50%;background:'+t.color+';flex-shrink:0;"></div>'+
+        '<span style="font-size:15px;font-weight:bold;color:var(--blue);">'+t.name+'</span>'+
+      '</button>'+
+      '<button onclick="promptRenameTeam('+t.idx+')" style="padding:10px 12px;border-radius:var(--radius);border:1.5px solid rgba(0,39,76,0.2);background:#fff;cursor:pointer;font-size:16px;" title="Rename team">✏️</button>'+
+    '</div>'
   ).join('');
   document.getElementById('app').innerHTML=
     '<div style="min-height:100vh;background:linear-gradient(160deg,var(--blue) 0%,#1a3a5c 60%,#c8d8e8 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">'+
     '<div style="width:100%;max-width:380px;background:#fff;border-radius:16px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.18);">'+
       '<div style="font-size:18px;font-weight:bold;color:var(--blue);margin-bottom:4px;">Which team are you on?</div>'+
-      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">You will only be able to enter scores for your team.</div>'+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Tap ✏️ to rename your team, then tap it to join.</div>'+
       teamBtns+
       '<button onclick="selectMyTeam(null)" style="width:100%;padding:12px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:12px;margin-top:4px;">I am just watching (view only)</button>'+
     '</div></div>';
+}
+
+function promptRenameTeam(tIdx){
+  const t=getTeamByIdx(tIdx);
+  if(!t) return;
+  const newName=prompt('Rename team:',t.name);
+  if(!newName||!newName.trim()) return;
+  mutate(()=>{
+    if(tIdx===1) state.team1.name=newName.trim();
+    else if(tIdx===2) state.team2.name=newName.trim();
+    else{const et=(state.extraTeams||[])[tIdx-3];if(et) et.name=newName.trim();}
+  });
+  renderTeamPicker();
 }
 
 function selectMyTeam(tIdx){
