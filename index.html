@@ -808,8 +808,9 @@ function renderJoinScreen(){
 function renderTab(){
   if(tab==='scoreboard'){
     if(state.eventType==='scramble'){
-      // Show team picker inline if not yet selected and teams exist
-      if(state.myTeamIdx==null&&allTeams().some(t=>t.players&&t.players.length>0)){
+      // Show team picker only if teams exist with players and user hasn't picked yet
+      const teamsWithPlayers=allTeams().filter(t=>t.players&&t.players.length>0);
+      if(state.myTeamIdx==null&&teamsWithPlayers.length>=2){
         renderTeamPicker(); return '';
       }
       return renderScrambleLeaderboard();
