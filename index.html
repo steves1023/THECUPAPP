@@ -329,17 +329,84 @@ function renderScrambleLeaderboard(){
   const started=entries.filter(e=>e.holes>0).sort((a,b)=>a.vp-b.vp);
   const notStarted=entries.filter(e=>e.holes===0);
 
+  // Scorecard row builder
+  function scorecardRow(e){
+    const totalHoles=state.settings.holes||18;
+    const front=Array.from({length:9},(_,i)=>i+1);
+    const back=Array.from({length:9},(_,i)=>i+10);
+    function buildNine(holes9){
+      let cells='';
+      let nineTotal=0,nineAny=false;
+      holes9.forEach(h=>{
+        const s=e.scores[h];
+        const ch=courseHoles[h-1];
+        const par=ch?ch.par:4;
+        const d=s!=null?s-par:null;
+        let bg='transparent',bdr='transparent',col='var(--blue)',shape='';
+        if(s!=null){
+          if(d<=-2){bg='#e8f5e9';bdr='#1B5E20';col='#1B5E20';shape='border-radius:50%;';}
+          else if(d===-1){bg='#e8f5e9';bdr='#2E7D32';col='#1B5E20';shape='border-radius:50%;';}
+          else if(d===1){bg='#fde8e8';bdr='#C0392B';col='#C0392B';shape='border-radius:3px;';}
+          else if(d>=2){bg='#fde8e8';bdr='#8B0000';col='#8B0000';shape='border-radius:3px;outline:1.5px solid #8B0000;outline-offset:1px;';}
+          nineTotal+=s;nineAny=true;
+        }
+        cells+='<td style="text-align:center;padding:2px 1px;min-width:22px;">'+
+          '<div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;margin:0 auto;font-size:11px;font-weight:bold;color:'+col+';background:'+bg+';border:1.5px solid '+bdr+';'+shape+'">'+
+            (s!=null?s:'—')+
+          '</div>'+
+        '</td>';
+      });
+      cells+='<td style="text-align:center;padding:2px 4px;font-size:12px;font-weight:bold;color:var(--blue);border-left:2px solid rgba(0,39,76,0.1);">'+(nineAny?nineTotal:'—')+'</td>';
+      return cells;
+    }
+    const parFront=front.reduce((s,h)=>s+(courseHoles[h-1]?courseHoles[h-1].par:4),0);
+    const parBack=back.reduce((s,h)=>s+(courseHoles[h-1]?courseHoles[h-1].par:4),0);
+    return '<div style="overflow-x:auto;border-top:1px solid rgba(0,39,76,0.06);">'+
+      '<table style="border-collapse:collapse;width:100%;min-width:400px;font-family:Arial;">'+
+        '<thead>'+
+          '<tr style="background:rgba(0,39,76,0.04);">'+
+            '<th style="text-align:left;padding:3px 8px;font-size:10px;color:var(--text-dim);font-weight:bold;white-space:nowrap;">HOLE</th>'+
+            front.map(h=>'<th style="text-align:center;padding:3px 2px;font-size:10px;color:var(--text-dim);min-width:22px;">'+h+'</th>').join('')+
+            '<th style="text-align:center;padding:3px 4px;font-size:10px;color:var(--text-dim);border-left:2px solid rgba(0,39,76,0.1);">OUT</th>'+
+            back.map(h=>'<th style="text-align:center;padding:3px 2px;font-size:10px;color:var(--text-dim);min-width:22px;">'+h+'</th>').join('')+
+            '<th style="text-align:center;padding:3px 4px;font-size:10px;color:var(--text-dim);border-left:2px solid rgba(0,39,76,0.1);">IN</th>'+
+            '<th style="text-align:center;padding:3px 4px;font-size:10px;color:var(--text-dim);border-left:2px solid rgba(0,39,76,0.1);">TOT</th>'+
+          '</tr>'+
+          '<tr style="background:rgba(0,39,76,0.02);">'+
+            '<td style="padding:2px 8px;font-size:10px;color:var(--text-dim);">Par</td>'+
+            front.map(h=>'<td style="text-align:center;padding:2px 1px;font-size:10px;color:var(--text-dim);">'+(courseHoles[h-1]?courseHoles[h-1].par:4)+'</td>').join('')+
+            '<td style="text-align:center;font-size:10px;color:var(--text-dim);border-left:2px solid rgba(0,39,76,0.1);">'+parFront+'</td>'+
+            back.map(h=>'<td style="text-align:center;padding:2px 1px;font-size:10px;color:var(--text-dim);">'+(courseHoles[h-1]?courseHoles[h-1].par:4)+'</td>').join('')+
+            '<td style="text-align:center;font-size:10px;color:var(--text-dim);border-left:2px solid rgba(0,39,76,0.1);">'+parBack+'</td>'+
+            '<td style="text-align:center;font-size:10px;color:var(--text-dim);border-left:2px solid rgba(0,39,76,0.1);">'+(parFront+parBack)+'</td>'+
+          '</tr>'+
+        '</thead>'+
+        '<tbody>'+
+          '<tr>'+
+            '<td style="padding:3px 8px;"><div style="display:flex;align-items:center;gap:5px;"><div style="width:8px;height:8px;border-radius:50%;background:'+e.t.color+';"></div><span style="font-size:11px;font-weight:bold;color:var(--blue);white-space:nowrap;">'+e.t.name+'</span></div></td>'+
+            buildNine(front)+
+            buildNine(back)+
+            '<td style="text-align:center;padding:2px 4px;font-size:12px;font-weight:bold;color:var(--blue);border-left:2px solid rgba(0,39,76,0.1);">'+(e.holes>0?e.total:'—')+'</td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+    '</div>';
+  }
+
   const rows=started.map((e,pos)=>{
     const vpStr=e.vp===0?'E':e.vp>0?('+'+e.vp):(''+e.vp);
     const vpColor=e.vp<0?'#1B5E20':e.vp>0?'#B71C1C':'var(--blue)';
     const medal=pos===0?'🥇':pos===1?'🥈':pos===2?'🥉':(pos+1);
-    return '<div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(0,39,76,0.06);background:'+(pos===0?'rgba(255,203,5,0.06)':'#fff')+';gap:12px;">'+
-      '<div style="font-size:14px;font-weight:bold;color:var(--blue);min-width:28px;">'+medal+'</div>'+
-      '<div style="width:10px;height:10px;border-radius:50%;background:'+e.t.color+';flex-shrink:0;"></div>'+
-      '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+e.t.name+'</div>'+
-      '<div style="font-size:11px;color:var(--text-muted);margin-right:8px;">Thru '+e.holes+'</div>'+
-      '<div style="font-size:18px;font-weight:bold;color:'+vpColor+';min-width:40px;text-align:right;">'+vpStr+'</div>'+
-      '<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;margin-left:6px;">✏️</button>'+
+    return '<div style="border-bottom:2px solid rgba(0,39,76,0.08);background:'+(pos===0?'rgba(255,203,5,0.04)':'#fff')+';">'+
+      '<div style="display:flex;align-items:center;padding:10px 16px;gap:12px;">'+
+        '<div style="font-size:14px;font-weight:bold;color:var(--blue);min-width:28px;">'+medal+'</div>'+
+        '<div style="width:10px;height:10px;border-radius:50%;background:'+e.t.color+';flex-shrink:0;"></div>'+
+        '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+e.t.name+'</div>'+
+        '<div style="font-size:11px;color:var(--text-muted);margin-right:8px;">Thru '+e.holes+'</div>'+
+        '<div style="font-size:18px;font-weight:bold;color:'+vpColor+';min-width:40px;text-align:right;">'+vpStr+'</div>'+
+        '<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;margin-left:6px;">✏️</button>'+
+      '</div>'+
+      scorecardRow(e)+
     '</div>';
   }).join('');
 
