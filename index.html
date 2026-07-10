@@ -621,26 +621,23 @@ function renderJoinScreen(){
           <input type="text" id="j-event" placeholder="The Cup 2025" style="font-size:15px;text-align:center;"></div>
         <div class="form-group"><label class="form-label">Event Type</label>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-            <div onclick="document.querySelectorAll('.etype-btn').forEach(b=>b.classList.remove('etype-sel'));this.classList.add('etype-sel');document.getElementById('j-etype').value='rydercup';"
-              class="etype-btn etype-sel" data-type="rydercup"
-              style="padding:10px 6px;border-radius:var(--radius);border:2px solid var(--blue);background:rgba(0,39,76,0.08);cursor:pointer;text-align:center;">
+            <div onclick="selectEtype('rydercup')" id="etype-rydercup"
+              style="padding:10px 6px;border-radius:var(--radius);border:2px solid #FFCB05;background:#FFCB05;cursor:pointer;text-align:center;transition:all 0.15s;">
               <div style="font-size:20px;margin-bottom:4px;">🏆</div>
               <div style="font-size:11px;font-weight:bold;color:var(--blue);">Ryder Cup</div>
-              <div style="font-size:9px;color:var(--text-muted);">Teams vs Teams</div>
+              <div style="font-size:9px;color:var(--blue);opacity:0.7;">Teams vs Teams</div>
             </div>
-            <div onclick="document.querySelectorAll('.etype-btn').forEach(b=>b.classList.remove('etype-sel'));this.classList.add('etype-sel');document.getElementById('j-etype').value='scramble';"
-              class="etype-btn" data-type="scramble"
-              style="padding:10px 6px;border-radius:var(--radius);border:2px solid var(--border);background:#fff;cursor:pointer;text-align:center;">
+            <div onclick="selectEtype('scramble')" id="etype-scramble"
+              style="padding:10px 6px;border-radius:var(--radius);border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);cursor:pointer;text-align:center;transition:all 0.15s;">
               <div style="font-size:20px;margin-bottom:4px;">🏌️</div>
-              <div style="font-size:11px;font-weight:bold;color:var(--blue);">Scramble</div>
-              <div style="font-size:9px;color:var(--text-muted);">Live Leaderboard</div>
+              <div style="font-size:11px;font-weight:bold;color:#fff;">Scramble</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.6);">Live Leaderboard</div>
             </div>
-            <div onclick="document.querySelectorAll('.etype-btn').forEach(b=>b.classList.remove('etype-sel'));this.classList.add('etype-sel');document.getElementById('j-etype').value='singlematch';"
-              class="etype-btn" data-type="singlematch"
-              style="padding:10px 6px;border-radius:var(--radius);border:2px solid var(--border);background:#fff;cursor:pointer;text-align:center;">
+            <div onclick="selectEtype('singlematch')" id="etype-singlematch"
+              style="padding:10px 6px;border-radius:var(--radius);border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);cursor:pointer;text-align:center;transition:all 0.15s;">
               <div style="font-size:20px;margin-bottom:4px;">⚔️</div>
-              <div style="font-size:11px;font-weight:bold;color:var(--blue);">Single Match</div>
-              <div style="font-size:9px;color:var(--text-muted);">1v1 or 2v2</div>
+              <div style="font-size:11px;font-weight:bold;color:#fff;">Single Match</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.6);">1v1 or 2v2</div>
             </div>
           </div>
           <input type="hidden" id="j-etype" value="rydercup">
@@ -674,6 +671,24 @@ function renderTab(){
 }
 
 /* \u2550\u2550\u2550 JOIN/CREATE \u2550\u2550\u2550 */
+function selectEtype(type){
+  document.getElementById('j-etype').value=type;
+  ['rydercup','scramble','singlematch'].forEach(t=>{
+    const el=document.getElementById('etype-'+t);
+    if(!el) return;
+    if(t===type){
+      el.style.background='#FFCB05';
+      el.style.borderColor='#FFCB05';
+      el.querySelectorAll('div').forEach(d=>{d.style.color='var(--blue)';d.style.opacity='1';});
+    } else {
+      el.style.background='rgba(255,255,255,0.1)';
+      el.style.borderColor='rgba(255,255,255,0.3)';
+      el.querySelectorAll('div').forEach((d,i)=>{d.style.color=i===1?'#fff':'rgba(255,255,255,0.6)';d.style.opacity='1';});
+    }
+  });
+}
+
+
 async function createRoom(){
   const eventName=(document.getElementById('j-event')||{}).value||'The Cup';
   const customCode=((document.getElementById('j-newcode')||{}).value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -1585,6 +1600,96 @@ function scoreCellStyle(score, par){
   return{tdStyle:'background:#fff;border:1px solid rgba(0,39,76,0.08);',
     innerHtml:`<div style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:4px;border:2px solid #C0392B;"><div style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:2px;border:2px solid #8B0000;background:#fdecea;"><span style="font-size:14px;font-weight:bold;color:#8B0000;">${score}</span></div></div>`};
 }
+
+function openScrambleScorecard(mi, startHole){
+  const m=state.matches[mi];
+  if(!m) return;
+  const cd=m.courseData||state.settings.courseData;
+  const totalHoles=m.totalHoles||18;
+  if(startHole==null){
+    startHole=1;
+    for(let h=1;h<=totalHoles;h++){const hd=(m.holes||{})[h];if(!hd||hd.t1==null||hd.t2==null){startHole=h;break;}}
+  }
+  const h=startHole;
+  const ch=cd&&cd.holes&&cd.holes[h-1];
+  const par=ch?ch.par:4;
+  const si=ch?ch.handicap:h;
+  const yds=ch?(ch.yardage||''):'';
+  const hd=(m.holes||{})[h]||{};
+  const teams=[
+    {label:mLabel(m,1),color:state.team1.color,key:'t1',score:hd.t1},
+    {label:mLabel(m,2),color:state.team2.color,key:'t2',score:hd.t2},
+  ];
+  function scoreGrid(t){
+    const score=t.score;
+    let html='<div style="display:grid;grid-template-columns:repeat(10,1fr) auto;gap:4px;">';
+    for(let v=1;v<=10;v++){
+      const sel=score===v;
+      const d=v-par;
+      let bg='#f5f5f5',bdr='transparent',col='var(--blue)',shape='border-radius:4px;';
+      if(sel){
+        if(d<=-2){bg='#e8f5e9';bdr='#1B5E20';col='#1B5E20';shape='border-radius:50%;outline:2px solid #1B5E20;outline-offset:2px;';}
+        else if(d===-1){bg='#e8f5e9';bdr='#2E7D32';col='#1B5E20';shape='border-radius:50%;';}
+        else if(d===0){bg='rgba(0,39,76,0.08)';bdr='var(--blue)';col='var(--blue)';}
+        else if(d===1){bg='#fde8e8';bdr='#C0392B';col='#C0392B';shape='border-radius:4px;';}
+        else{bg='#fde8e8';bdr='#8B0000';col='#8B0000';shape='border-radius:4px;outline:2px solid #8B0000;outline-offset:2px;';}
+      }
+      html+='<div onclick="setScrambleScore('+mi+','+h+'\''+t.key+'\','+v+','+par+')" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;font-weight:bold;background:'+bg+';border:2px solid '+bdr+';'+shape+'color:'+col+';">'+v+'</div>';
+    }
+    html+='<div onclick="setScrambleScore('+mi+','+h+',\''+t.key+'\',null,'+par+')" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:#C0392B;">&#10005;</div>';
+    html+='</div>';
+    return html;
+  }
+  const teamRows=teams.map(t=>'<div style="padding:16px;border-bottom:1px solid rgba(0,39,76,0.06);">'+
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'+
+      '<div style="width:12px;height:12px;border-radius:50%;background:'+t.color+';"></div>'+
+      '<div style="font-size:15px;font-weight:bold;color:var(--blue);">'+t.label+'</div>'+
+      (t.score!=null?'<div style="margin-left:auto;font-size:12px;color:var(--text-muted);">Score: '+t.score+'</div>':'')+
+    '</div>'+
+    scoreGrid(t)+
+  '</div>').join('');
+  const prevH=h>1?h-1:null;
+  const nextH=h<totalHoles?h+1:null;
+  modal='<div class="modal" style="padding:0;overflow:hidden;" onclick="event.stopPropagation()">'+
+    '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(0,39,76,0.08);">'+
+      '<div style="flex:1;">'+
+        '<div style="font-size:11px;color:var(--text-muted);">'+(FORMATS[m.format]||m.format)+'</div>'+
+        '<div style="font-size:13px;font-weight:bold;color:var(--blue);">'+mLabel(m,1)+' vs '+mLabel(m,2)+'</div>'+
+      '</div>'+
+      '<button class="modal-close" onclick="closeModal()">&#10005;</button>'+
+    '</div>'+
+    '<div style="background:var(--blue);padding:14px 16px 12px;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;">'+
+        '<div style="font-size:28px;font-weight:900;color:#fff;">Hole '+h+'</div>'+
+        '<div style="text-align:right;">'+
+          '<span style="font-size:14px;color:var(--maize);font-weight:bold;">Par '+par+'</span>'+
+          (si?' <span style="font-size:11px;color:rgba(255,255,255,0.6);">SI '+si+'</span>':'')+
+          (yds?' <span style="font-size:11px;color:rgba(255,255,255,0.6);">'+yds+'y</span>':'')+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    teamRows+
+    '<div style="display:flex;gap:8px;padding:12px 16px;">'+
+      '<button class="btn btn-ghost w-full" '+(prevH?'onclick="openScrambleScorecard('+mi+','+prevH+')"':'disabled="true"')+'>&#8592; Prev</button>'+
+      '<button class="btn btn-gold w-full" onclick="'+(nextH?'openScrambleScorecard('+mi+','+nextH+')':'closeModal()')+'">'+( nextH?'Next &#8594;':'Done')+'</button>'+
+    '</div>'+
+  '</div>';
+  render();
+}
+
+function setScrambleScore(mi,h,key,score,par){
+  mutate(()=>{
+    const m=state.matches[mi];
+    if(!m.holes[h]) m.holes[h]={};
+    if(score==null) delete m.holes[h][key];
+    else m.holes[h][key]=score;
+    const ch=(m.courseData||state.settings.courseData);
+    const chh=ch&&ch.holes&&ch.holes[h-1];
+    if(chh) m.holes[h].par=chh.par;
+  });
+  openScrambleScorecard(mi,h);
+}
+
 
 function openScorecard(mi,startHole){
   const m=state.matches[mi];
