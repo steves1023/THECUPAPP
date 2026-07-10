@@ -17,6 +17,7 @@
   --border:rgba(0,39,76,0.12);
   --text:#00274C;--text-muted:#3A5070;--text-dim:#6B82A0;
   --radius:10px;--radius-lg:14px;
+.etype-btn.etype-sel{border-color:var(--blue)!important;background:rgba(0,39,76,0.08)!important;}
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;padding:0;background:#fff;font-family:Arial,sans-serif;-webkit-font-smoothing:antialiased;}
@@ -309,6 +310,95 @@ function renderSyncBar(){
 }
 
 /* \u2550\u2550\u2550 MATH \u2550\u2550\u2550 */
+function renderScrambleLeaderboard(){
+  // Group players by team, show live leaderboard sorted by score
+  const allT=allTeams();
+  const teams=allT.map(t=>{
+    const pids=t.players||[];
+    // Get combined score across all matches/sessions
+    let totalGross=0, totalNet=0, holesPlayed=0, any=false;
+    state.matches.forEach(m=>{
+      if(!m.indPlayers) return;
+      const matchPids=m.indPlayers.filter(id=>pids.includes(id));
+      if(!matchPids.length) return;
+      const diffs=(m.indPlayers||[]).map(id=>{
+        const p=state.players.find(pl=>pl.id===id);return p?p.handicap||0:0;
+      });
+      const minH=Math.min(...diffs);
+      for(let h=1;h<=m.totalHoles;h++){
+        const hd=(m.holes||{})[h];if(!hd)continue;
+        let bestGross=null,bestNet=null;
+        matchPids.forEach(pid=>{
+          const pi=(m.indPlayers||[]).indexOf(pid);if(pi<0)return;
+          const raw=hd['p'+pi];if(raw==null)return;
+          const net=raw-strokesOn(diffs[pi]-minH,holeSI(m,h),m.totalHoles);
+          if(bestGross===null||raw<bestGross) bestGross=raw;
+          if(bestNet===null||net<bestNet) bestNet=net;
+        });
+        if(bestGross!==null){
+          const ch=(m.courseData||state.settings.courseData)?.holes?.[h-1];
+          const par=ch?ch.par:4;
+          totalGross+=bestGross;totalNet+=bestNet;holesPlayed++;any=true;
+        }
+      }
+    });
+    return{team:t,totalGross,totalNet,holesPlayed,any};
+  }).filter(x=>x.any||true);
+
+  // Sort by net score (lower = better)
+  const sorted=[...teams].filter(x=>x.any).sort((a,b)=>a.totalNet-b.totalNet);
+  const notStarted=teams.filter(x=>!x.any);
+
+  // Calculate relative to par
+  const courseHoles=(state.settings.courseData?.holes||[]);
+  const totalPar=courseHoles.reduce((s,h)=>s+(h.par||4),0)||72;
+  const holesPar=sorted.map(x=>{
+    const playedPar=courseHoles.slice(0,x.holesPlayed).reduce((s,h)=>s+(h.par||4),0)||x.holesPlayed*4;
+    return{...x,vsParNet:x.totalNet-playedPar,vsParGross:x.totalGross-playedPar,playedPar};
+  });
+
+  const rows=holesPar.map((x,pos)=>{
+    const vp=x.vsParNet;
+    const vpStr=vp===0?'E':vp>0?('+'+vp):(''+vp);
+    const vpColor=vp<0?'#1B5E20':vp>0?'#B71C1C':'var(--blue)';
+    return '<div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(0,39,76,0.06);background:'+(pos===0?'rgba(255,203,5,0.06)':'#fff')+';gap:12px;">'+
+      '<div style="font-size:14px;font-weight:bold;color:var(--blue);min-width:24px;">'+(pos+1)+'</div>'+
+      '<div style="width:10px;height:10px;border-radius:50%;background:'+x.team.color+';flex-shrink:0;"></div>'+
+      '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+x.team.name+'</div>'+
+      '<div style="font-size:11px;color:var(--text-muted);margin-right:8px;">'+x.holesPlayed+' holes</div>'+
+      '<div style="font-size:18px;font-weight:bold;color:'+vpColor+';min-width:36px;text-align:right;">'+vpStr+'</div>'+
+    '</div>';
+  }).join('');
+
+  const waitingRows=notStarted.map(x=>'<div style="display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(0,39,76,0.06);gap:12px;opacity:0.5;">'+
+    '<div style="font-size:14px;font-weight:bold;color:var(--text-muted);min-width:24px;">—</div>'+
+    '<div style="width:10px;height:10px;border-radius:50%;background:'+x.team.color+';flex-shrink:0;"></div>'+
+    '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+x.team.name+'</div>'+
+    '<div style="font-size:11px;color:var(--text-muted);">Not started</div>'+
+  '</div>').join('');
+
+  return '<div style="padding:12px;">' +
+    '<div style="background:var(--blue);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">'+
+      '<div style="font-size:13px;font-weight:bold;color:var(--maize);text-transform:uppercase;letter-spacing:1px;">🏌️ Live Leaderboard</div>'+
+      '<div style="font-size:11px;color:rgba(255,255,255,0.6);">Net Score</div>'+
+    '</div>'+
+    '<div style="background:#fff;border-radius:0 0 var(--radius-lg) var(--radius-lg);overflow:hidden;border:1px solid var(--border);border-top:none;">'+
+      '<div style="display:flex;padding:6px 16px;background:rgba(0,39,76,0.04);border-bottom:2px solid var(--maize);">'+
+        '<div style="min-width:24px;font-size:10px;font-weight:bold;color:var(--text-dim);text-transform:uppercase;">Pos</div>'+
+        '<div style="width:10px;margin-right:12px;"></div>'+
+        '<div style="flex:1;font-size:10px;font-weight:bold;color:var(--text-dim);text-transform:uppercase;">Team</div>'+
+        '<div style="font-size:10px;font-weight:bold;color:var(--text-dim);text-transform:uppercase;min-width:36px;text-align:right;">Score</div>'+
+      '</div>'+
+      rows+waitingRows+
+      (sorted.length===0&&notStarted.length===0?'<div class="empty-state">No teams yet. Add teams in the Teams tab.</div>':'')+
+    '</div>'+
+  '</div>'+
+  '<div class="section-header"><span class="section-title">Matches</span><button class="btn btn-sm btn-gold" onclick="openMatchModal(null)">+ Match</button></div>'+
+  (state.matches.length===0?'<div class="empty-state">No matches yet. Tap + Match to begin.</div>':'')+
+  renderGroupedMatches();
+}
+
+
 function adjustPtw(delta){
   const t1=teamPts(1),t2=teamPts(2),tot=t1+t2;
   const defaultNeed=tot>0?parseFloat((tot/2+0.5).toFixed(1)):0.5;
@@ -529,6 +619,32 @@ function renderJoinScreen(){
       <div style="width:100%;max-width:340px;">
         <div class="form-group"><label class="form-label">Event Name</label>
           <input type="text" id="j-event" placeholder="The Cup 2025" style="font-size:15px;text-align:center;"></div>
+        <div class="form-group"><label class="form-label">Event Type</label>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+            <div onclick="document.querySelectorAll('.etype-btn').forEach(b=>b.classList.remove('etype-sel'));this.classList.add('etype-sel');document.getElementById('j-etype').value='rydercup';"
+              class="etype-btn etype-sel" data-type="rydercup"
+              style="padding:10px 6px;border-radius:var(--radius);border:2px solid var(--blue);background:rgba(0,39,76,0.08);cursor:pointer;text-align:center;">
+              <div style="font-size:20px;margin-bottom:4px;">🏆</div>
+              <div style="font-size:11px;font-weight:bold;color:var(--blue);">Ryder Cup</div>
+              <div style="font-size:9px;color:var(--text-muted);">Teams vs Teams</div>
+            </div>
+            <div onclick="document.querySelectorAll('.etype-btn').forEach(b=>b.classList.remove('etype-sel'));this.classList.add('etype-sel');document.getElementById('j-etype').value='scramble';"
+              class="etype-btn" data-type="scramble"
+              style="padding:10px 6px;border-radius:var(--radius);border:2px solid var(--border);background:#fff;cursor:pointer;text-align:center;">
+              <div style="font-size:20px;margin-bottom:4px;">🏌️</div>
+              <div style="font-size:11px;font-weight:bold;color:var(--blue);">Scramble</div>
+              <div style="font-size:9px;color:var(--text-muted);">Live Leaderboard</div>
+            </div>
+            <div onclick="document.querySelectorAll('.etype-btn').forEach(b=>b.classList.remove('etype-sel'));this.classList.add('etype-sel');document.getElementById('j-etype').value='singlematch';"
+              class="etype-btn" data-type="singlematch"
+              style="padding:10px 6px;border-radius:var(--radius);border:2px solid var(--border);background:#fff;cursor:pointer;text-align:center;">
+              <div style="font-size:20px;margin-bottom:4px;">⚔️</div>
+              <div style="font-size:11px;font-weight:bold;color:var(--blue);">Single Match</div>
+              <div style="font-size:9px;color:var(--text-muted);">1v1 or 2v2</div>
+            </div>
+          </div>
+          <input type="hidden" id="j-etype" value="rydercup">
+        </div>
         <div class="form-group"><label class="form-label">Room Code <span style="font-size:10px;font-weight:normal;text-transform:none;opacity:0.7;">(unique code for your group)</span></label>
           <input type="text" id="j-newcode" class="code-input" placeholder="e.g. EAGLES" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-gold btn-lg w-full" onclick="createRoom()" style="margin-bottom:12px;">Create New Event</button>
@@ -544,7 +660,10 @@ function renderJoinScreen(){
 }
 
 function renderTab(){
-  if(tab==='scoreboard')return renderScoreboard();
+  if(tab==='scoreboard'){
+    if(state.eventType==='scramble') return renderScrambleLeaderboard();
+    return renderScoreboard();
+  }
   if(tab==='matches')return renderMatches();
   if(tab==='teams')return renderTeams();
   if(tab==='betting')return renderBetting();
@@ -573,6 +692,7 @@ async function createRoom(){
   if(btn){btn.textContent='Create New Event';btn.disabled=false;}
   state={
     eventName:eventName.trim()||'The Cup',
+    eventType:(document.getElementById('j-etype')||{}).value||'rydercup',
     team1:{name:'Eagles',color:'#00274C',players:[]},
     team2:{name:'Falcons',color:'#FFCB05',players:[]},
     players:[],matches:[],bets:[],history:[],sessions:[],savedCourses:[],extraTeams:[],pools:{pinnies:{active:false,amount:5,participants:[]},ctp:{active:false,amount:10,participants:[]},birdies:{active:false,amount:2,participants:[]},skins:{active:false,amount:5,participants:[]}},
