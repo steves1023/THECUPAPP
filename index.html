@@ -404,7 +404,7 @@ function renderScrambleLeaderboard(){
         '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+e.t.name+'</div>'+
         '<div style="font-size:11px;color:var(--text-muted);margin-right:8px;">Thru '+e.holes+'</div>'+
         '<div style="font-size:18px;font-weight:bold;color:'+vpColor+';min-width:40px;text-align:right;">'+vpStr+'</div>'+
-        '<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;margin-left:6px;">✏️</button>'+
+        (state.myTeamIdx==null||state.myTeamIdx===e.t.idx?'<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;margin-left:6px;">✏️</button>':'')+
       '</div>'+
       scorecardRow(e)+
     '</div>';
@@ -415,7 +415,7 @@ function renderScrambleLeaderboard(){
     '<div style="width:10px;height:10px;border-radius:50%;background:'+e.t.color+';flex-shrink:0;"></div>'+
     '<div style="flex:1;font-size:14px;font-weight:bold;color:var(--blue);">'+e.t.name+'</div>'+
     '<div style="font-size:11px;color:var(--text-muted);flex:1;">Not started</div>'+
-    '<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;">✏️</button>'+
+    (state.myTeamIdx==null||state.myTeamIdx===e.t.idx?'<button class="btn btn-sm btn-gold" onclick="openTeamScrambleCard('+e.t.idx+')" style="padding:4px 10px;">✏️</button>':'')+
   '</div>').join('');
 
   const cd2=state.settings.courseData;
@@ -884,7 +884,69 @@ async function joinRoom(){
     if(btn){btn.textContent='Join Event';btn.disabled=false;}
     state={...defaultState()};save();return;
   }
-  save();subscribeToRoom(state.roomCode);render();
+  save();subscribeToRoom(state.roomCode);
+  // For scramble events, ask which team they're on
+  if(state.eventType==='scramble'){
+    renderTeamPicker();
+  } else {
+    render();
+  }
+}
+
+function renderTeamPicker(){
+  const teams=allTeams();
+  const teamBtns=teams.map(t=>
+    '<button onclick="selectMyTeam('+t.idx+')" style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:var(--radius);border:2px solid '+t.color+';background:#fff;cursor:pointer;width:100%;text-align:left;margin-bottom:8px;">'+
+      '<div style="width:14px;height:14px;border-radius:50%;background:'+t.color+';flex-shrink:0;"></div>'+
+      '<span style="font-size:15px;font-weight:bold;color:var(--blue);">'+t.name+'</span>'+
+    '</button>'
+  ).join('');
+  document.getElementById('app').innerHTML=
+    '<div style="min-height:100vh;background:linear-gradient(160deg,var(--blue) 0%,#1a3a5c 60%,#c8d8e8 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">'+
+    '<div style="width:100%;max-width:380px;background:#fff;border-radius:16px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.18);">'+
+      '<div style="font-size:18px;font-weight:bold;color:var(--blue);margin-bottom:4px;">Which team are you on?</div>'+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">You will only be able to enter scores for your team.</div>'+
+      teamBtns+
+      '<button onclick="selectMyTeam(null)" style="width:100%;padding:12px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:12px;margin-top:4px;">I am just watching (view only)</button>'+
+    '</div></div>';
+}
+
+function selectMyTeam(tIdx){
+  state.myTeamIdx=tIdx;
+  save();
+  // Now ask for starting hole
+  if(tIdx!=null){
+    renderStartingHolePicker(tIdx);
+  } else {
+    render();
+  }
+}
+
+function renderStartingHolePicker(tIdx){
+  const t=getTeamByIdx(tIdx);
+  const totalHoles=state.settings.holes||18;
+  const holeBtns=Array.from({length:totalHoles},(_,i)=>i+1).map(h=>
+    '<button onclick="setStartingHole('+tIdx+','+h+')" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:bold;color:var(--blue);border:2px solid rgba(0,39,76,0.2);border-radius:8px;background:#fff;cursor:pointer;">'+h+'</button>'
+  ).join('');
+  document.getElementById('app').innerHTML=
+    '<div style="min-height:100vh;background:linear-gradient(160deg,var(--blue) 0%,#1a3a5c 60%,#c8d8e8 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">'+
+    '<div style="width:100%;max-width:380px;background:#fff;border-radius:16px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.18);">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'+
+        '<div style="width:12px;height:12px;border-radius:50%;background:'+(t?t.color:'#ccc')+';"></div>'+
+        '<div style="font-size:18px;font-weight:bold;color:var(--blue);">'+(t?t.name:'Team')+'</div>'+
+      '</div>'+
+      '<div style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">Which hole are you starting on?</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px;">'+holeBtns+'</div>'+
+      '<button onclick="setStartingHole('+tIdx+',1)" style="width:100%;padding:12px;border:1px solid rgba(0,39,76,0.2);border-radius:var(--radius);background:none;color:var(--text-muted);cursor:pointer;font-size:12px;">Start from hole 1 (default)</button>'+
+    '</div></div>';
+}
+
+function setStartingHole(tIdx,h){
+  if(!state.scrambleStartHoles) state.scrambleStartHoles={};
+  mutate(()=>{state.scrambleStartHoles[tIdx]=h;});
+  render();
+  // Auto-open scorecard to their starting hole
+  setTimeout(()=>openTeamScrambleCard(tIdx,h),300);
 }
 function leaveRoom(){
   if(!confirm('Leave this event?'))return;
