@@ -1267,7 +1267,7 @@ function renderSessionCard(s,si){
           <div style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></div>
           <div style="flex:1;">
             <div style="font-size:13px;font-weight:bold;color:var(--blue);">${players.map(p=>p.name).join(' + ')}</div>
-            <div style="font-size:10px;color:var(--text-muted);">HCP ${(players.reduce((a,p)=>a+(p.handicap||0),0)/Math.max(1,players.length)).toFixed(1)}</div>
+            <div style="font-size:10px;color:var(--text-muted);">HCP ${(h=>h<0?"+"+Math.abs(h):h)((players.reduce((a,p)=>a+(p.handicap||0),0)/Math.max(1,players.length)))}</div>
           </div>
           ${(()=>{let tot=0,n=0;for(let h=1;h<=(s.totalHoles||18);h++){const sc=(s.holes||{})[h];if(sc&&sc['g'+gi]!=null){tot+=sc['g'+gi];n++;}}return n>0?`<div style="font-size:20px;font-weight:bold;color:var(--blue);">${tot}</div>`:`<div style="font-size:13px;color:var(--text-dim);">—</div>`;})()}
         </div>`;
@@ -2414,7 +2414,7 @@ function renderMatchModal(){
           <span style="width:9px;height:9px;border-radius:50%;background:${ac};flex-shrink:0;"></span>
           <div>
             <div style="font-size:13px;font-weight:bold;color:var(--blue);line-height:1.2;">${p.name}</div>
-            <div style="font-size:10px;color:var(--text-muted);">HCP ${p.handicap}</div>
+            <div style="font-size:10px;color:var(--text-muted);">HCP ${p.handicap<0?"+"+Math.abs(p.handicap):p.handicap}</div>
           </div>
         </div>
         <div style="flex:1;display:flex;gap:5px;overflow-x:auto;padding:2px 0;-webkit-overflow-scrolling:touch;">
@@ -2429,7 +2429,7 @@ function renderMatchModal(){
   function playerPicker(ids,color,name,side){
     if(!ids.length)return'';
     return`<div class="team-section-label" style="color:${color};">${name}</div>`+ids.map(p=>{const sel=d[side+'Players']&&d[side+'Players'].includes(p.id);const ac=AVC[allPlayers.findIndex(pl=>pl.id===p.id)%AVC.length];const init=p.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
-      return`<div class="player-pick-item ${sel?'selected':''}" onclick="togglePick('${p.id}','${side}')"><div class="pick-check">${sel?'✓':''}</div><div class="player-avatar" style="width:24px;height:24px;font-size:10px;background:${ac}22;color:${ac};">${init}</div><div style="flex:1;font-size:12px;font-family:Arial;">${p.name}</div><div style="font-size:11px;color:var(--text-muted);font-family:Arial;">HCP ${p.handicap}</div></div>`;}).join('');
+      return`<div class="player-pick-item ${sel?'selected':''}" onclick="togglePick('${p.id}','${side}')"><div class="pick-check">${sel?'✓':''}</div><div class="player-avatar" style="width:24px;height:24px;font-size:10px;background:${ac}22;color:${ac};">${init}</div><div style="flex:1;font-size:12px;font-family:Arial;">${p.name}</div><div style="font-size:11px;color:var(--text-muted);font-family:Arial;">HCP ${p.handicap<0?"+"+Math.abs(p.handicap):p.handicap}</div></div>`;}).join('');
   }
   const t1p=t1pids.map(id=>allPlayers.find(p=>p.id===id)).filter(Boolean);
   const t2p=t2pids.map(id=>allPlayers.find(p=>p.id===id)).filter(Boolean);
@@ -2443,7 +2443,7 @@ function renderMatchModal(){
     return`<div class="player-pick-item ${sel?'selected':''}" style="cursor:pointer;">
       <div onclick="toggleIndPlayer('${p.id}')" class="pick-check">${sel?'✓':''}</div>
       <div class="player-avatar" style="width:24px;height:24px;font-size:10px;background:${ac}22;color:${ac};" onclick="toggleIndPlayer('${p.id}')">${init}</div>
-      <div style="flex:1;font-size:12px;font-family:Arial;" onclick="toggleIndPlayer('${p.id}')">${p.name} <span style="color:var(--text-muted);">HCP ${p.handicap}</span></div>
+      <div style="flex:1;font-size:12px;font-family:Arial;" onclick="toggleIndPlayer('${p.id}')">${p.name} <span style="color:var(--text-muted);">HCP ${p.handicap<0?"+"+Math.abs(p.handicap):p.handicap}</span></div>
       ${sel?`<div style="display:flex;gap:3px;">
         <div onclick="setIndSide('${p.id}','1')" style="padding:2px 8px;border-radius:10px;font-size:10px;cursor:pointer;background:${side==='1'?state.team1.color:'rgba(0,39,76,0.08)'};color:${side==='1'?'#fff':'var(--blue)'};">${state.team1.name}</div>
         <div onclick="setIndSide('${p.id}','2')" style="padding:2px 8px;border-radius:10px;font-size:10px;cursor:pointer;background:${side==='2'?state.team2.color:'rgba(0,39,76,0.08)'};color:${side==='2'?'#fff':'var(--blue)'};">${state.team2.name}</div>
@@ -2832,7 +2832,7 @@ function renderTeams(){
       </div>
       <div style="font-size:26px;font-weight:bold;color:var(--blue);text-align:center;padding:2px 0;">${teamPts(t.idx)}</div>
       <div style="text-align:center;font-size:10px;color:var(--text-muted);margin-bottom:4px;">pts</div>
-      <div style="font-size:10px;color:var(--text-muted);font-family:Arial;">HCP ${avgHT(t.players)} · ${(t.players||[]).length} players</div>
+      <div style="font-size:10px;color:var(--text-muted);font-family:Arial;">HCP ${(h=>h<0?"+"+Math.abs(h):h)(avgHT(t.players))} · ${(t.players||[]).length} players</div>
     </div>`).join('')}
   </div>
   ${teams.map(t=>{const players=(t.players||[]).map(id=>state.players.find(p=>p.id===id)).filter(Boolean);
@@ -2847,7 +2847,7 @@ function renderPRow(p,tn){
   const isMe=p.name===state.myName;
   return`<div class="player-row" style="${isMe?'border:1px solid rgba(212,160,23,0.3);':''}">
     <div class="player-avatar" style="background:${ac}22;color:${ac};">${init}</div>
-    <div style="flex:1;"><div style="font-size:13px;font-weight:bold;">${p.name}${isMe?` <span class="badge badge-gold" style="font-size:9px;">You</span>`:''}</div><div style="font-size:11px;color:var(--text-muted);font-family:Arial;">HCP ${p.handicap} \u00b7 ${r.w}W ${r.l}L ${r.h}H</div></div>
+    <div style="flex:1;"><div style="font-size:13px;font-weight:bold;">${p.name}${isMe?` <span class="badge badge-gold" style="font-size:9px;">You</span>`:''}</div><div style="font-size:11px;color:var(--text-muted);font-family:Arial;">HCP ${p.handicap<0?"+"+Math.abs(p.handicap):p.handicap} \u00b7 ${r.w}W ${r.l}L ${r.h}H</div></div>
     ${state.isHost?`<div style="display:flex;gap:4px;">
       ${tn===0?allTeams().map(t=>`<button class="btn btn-sm btn-ghost" onclick="assignP('${p.id}',${t.idx})" style="color:${t.color};font-size:10px;border-color:${t.color}44;">${t.name}</button>`).join(''):`<button class="btn btn-sm btn-ghost" onclick="removeP('${p.id}',${tn})" style="font-size:10px;">Remove</button>`}
       <button class="btn btn-sm btn-ghost" onclick="openPlayerModal('${p.id}')">\u270e</button>
@@ -2948,7 +2948,7 @@ function deleteExtraTeam(tn){
     state.extraTeams.splice(tn-3,1);
   });modal=null;render();
 }
-function openAutoTeams(){if(!state.isHost)return;const sorted=[...state.players].sort((a,b)=>a.handicap-b.handicap);modal=`<div class="modal" onclick="event.stopPropagation()"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">Auto-Generate Teams</div><button class="modal-close" onclick="closeModal()">\u2715</button></div><div class="form-group"><label class="form-label">Method</label><select id="at-m"><option value="snake">Snake Draft (balanced)</option><option value="random">Random</option><option value="top_bottom">Low vs High HCP</option></select></div>${state.players.length?`${sorted.map(p=>`<div style="font-size:11px;color:var(--text-muted);padding:2px 0;font-family:Arial;">${p.name} (${p.handicap})</div>`).join('')}<button class="btn btn-gold w-full" style="margin-top:12px;" onclick="doAutoTeams()">Generate</button>`:`<div class="empty-state" style="padding:12px;">No players yet.</div>`}</div>`;render();}
+function openAutoTeams(){if(!state.isHost)return;const sorted=[...state.players].sort((a,b)=>a.handicap-b.handicap);modal=`<div class="modal" onclick="event.stopPropagation()"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title">Auto-Generate Teams</div><button class="modal-close" onclick="closeModal()">\u2715</button></div><div class="form-group"><label class="form-label">Method</label><select id="at-m"><option value="snake">Snake Draft (balanced)</option><option value="random">Random</option><option value="top_bottom">Low vs High HCP</option></select></div>${state.players.length?`${sorted.map(p=>`<div style="font-size:11px;color:var(--text-muted);padding:2px 0;font-family:Arial;">${p.name} (${p.handicap<0?"+"+Math.abs(p.handicap):p.handicap})</div>`).join('')}<button class="btn btn-gold w-full" style="margin-top:12px;" onclick="doAutoTeams()">Generate</button>`:`<div class="empty-state" style="padding:12px;">No players yet.</div>`}</div>`;render();}
 function doAutoTeams(){const m=document.getElementById('at-m').value;let s=[...state.players].sort((a,b)=>a.handicap-b.handicap);let t1=[],t2=[];if(m==='random'){s=s.sort(()=>Math.random()-0.5);s.forEach((p,i)=>{if(i%2===0)t1.push(p.id);else t2.push(p.id);});}else if(m==='top_bottom'){const h=Math.floor(s.length/2);t1=s.slice(0,h).map(p=>p.id);t2=s.slice(h).map(p=>p.id);}else{s.forEach((p,i)=>{const r=Math.floor(i/2);if(r%2===0){if(i%2===0)t1.push(p.id);else t2.push(p.id);}else{if(i%2===0)t2.push(p.id);else t1.push(p.id);}});}mutate(()=>{state.team1.players=t1;state.team2.players=t2;});modal=null;render();}
 function allTeams(){return[{...state.team1,idx:1},{...state.team2,idx:2},...(state.extraTeams||[]).map((t,i)=>({...t,idx:3+i}))];}
 function getTeamByIdx(idx){if(idx===1)return state.team1;if(idx===2)return state.team2;return(state.extraTeams||[])[idx-3];}
