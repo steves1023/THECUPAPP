@@ -1510,41 +1510,44 @@ function renderScoreboard(){
   const t1wins=ptw?t1>=ptw:false;
   const t2wins=ptw?t2>=ptw:false;
 
-  return`<div style="padding:12px;">
-    <div style="display:flex;gap:8px;align-items:stretch;">
+  // Progress bar between scores
+  const _tot=Math.max(t1+t2,1);
+  const _t1w=Math.round((t1/_tot)*100);
+  const _t2w=100-_t1w;
+
+  return`<div style="background:var(--blue);border-radius:var(--radius-lg);margin:12px;overflow:hidden;">
+    <!-- Team score bar -->
+    <div style="display:flex;align-items:stretch;min-height:80px;">
       <!-- Team 1 -->
-      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${t1wins?'#FFD700':state.team1.color};background:#fff;${t1wins?'box-shadow:0 0 0 3px rgba(255,215,0,0.4);':''}position:relative;">
-        ${t1wins?`<div style="position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:28px;line-height:1;z-index:2;">🏆</div>`:''}
-        <div style="background:${state.team1.color};padding:${t1wins?'18px':'6px'} 10px 6px;text-align:center;">
-          <div style="font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:Arial;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${state.team1.name}</div>
-        </div>
-        <div style="padding:10px;text-align:center;">
-          <div style="font-size:44px;font-weight:bold;line-height:1;color:${t1wins?'#B8860B':'var(--blue)'};">${t1}</div>
-          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">${t1wins?'🥇 WINNER':'points'}</div>
-        </div>
+      <div style="flex:1;background:${state.team1.color};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 10px;position:relative;">
+        ${t1wins?'<div style="position:absolute;top:4px;right:6px;font-size:18px;">🏆</div>':''}
+        <div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.85);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center;">${state.team1.name}</div>
+        <div style="font-size:54px;font-weight:900;color:#fff;line-height:1;font-family:Arial,sans-serif;">${t1}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:2px;">${t1wins?'🥇 WINNER':'pts'}</div>
       </div>
-      <!-- Middle -->
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:64px;gap:4px;">
-        <div style="font-size:10px;color:var(--text-dim);font-family:Arial;text-transform:uppercase;letter-spacing:0.5px;">Need</div>
-        <div style="display:flex;align-items:center;gap:4px;">
-          <button onclick="adjustPtw(-0.5)" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,39,76,0.2);background:#fff;color:var(--blue);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">−</button>
-          <div style="font-size:18px;font-weight:bold;color:var(--blue);min-width:36px;text-align:center;">${needDisplay}</div>
-          <button onclick="adjustPtw(0.5)" style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(0,39,76,0.2);background:#fff;color:var(--blue);font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">+</button>
+      <!-- Divider + need -->
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 6px;min-width:70px;gap:3px;">
+        <div style="font-size:9px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;">Need</div>
+        <div style="display:flex;align-items:center;gap:3px;">
+          <button onclick="adjustPtw(-0.5)" style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);color:#fff;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">−</button>
+          <div style="font-size:20px;font-weight:bold;color:${t1wins||t2wins?'#FFD700':'#fff'};min-width:32px;text-align:center;">${needDisplay}</div>
+          <button onclick="adjustPtw(0.5)" style="width:20px;height:20px;border-radius:50%;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);color:#fff;font-size:13px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">+</button>
         </div>
-        <div style="font-size:10px;color:var(--text-dim);font-family:Arial;">to win</div>
+        <div style="font-size:9px;color:rgba(255,255,255,0.5);">to win</div>
       </div>
       <!-- Team 2 -->
-      <div style="flex:1;border-radius:var(--radius-lg);overflow:hidden;border:2px solid ${t2wins?'#FFD700':state.team2.color};background:#fff;${t2wins?'box-shadow:0 0 0 3px rgba(255,215,0,0.4);':''}position:relative;">
-        ${t2wins?`<div style="position:absolute;top:-2px;left:50%;transform:translateX(-50%);font-size:28px;line-height:1;z-index:2;">🏆</div>`:''}
-        <div style="background:${state.team2.color};padding:${t2wins?'18px':'6px'} 10px 6px;text-align:center;">
-          <div style="font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:1px;font-family:Arial;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${state.team2.name}</div>
-        </div>
-        <div style="padding:10px;text-align:center;">
-          <div style="font-size:44px;font-weight:bold;line-height:1;color:${t2wins?'#B8860B':'var(--blue)'};">${t2}</div>
-          <div style="font-size:10px;color:var(--text-muted);font-family:Arial;margin-top:2px;">${t2wins?'🥇 WINNER':'points'}</div>
-        </div>
+      <div style="flex:1;background:${state.team2.color};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 10px;position:relative;">
+        ${t2wins?'<div style="position:absolute;top:4px;left:6px;font-size:18px;">🏆</div>':''}
+        <div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.85);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center;">${state.team2.name}</div>
+        <div style="font-size:54px;font-weight:900;color:#fff;line-height:1;font-family:Arial,sans-serif;">${t2}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:2px;">${t2wins?'🥇 WINNER':'pts'}</div>
       </div>
     </div>
+    <!-- Progress bar -->
+    ${(t1+t2)>0?`<div style="height:6px;display:flex;">
+      <div style="width:${_t1w}%;background:${state.team1.color};opacity:0.85;transition:width 0.4s;"></div>
+      <div style="width:${_t2w}%;background:${state.team2.color};opacity:0.85;transition:width 0.4s;"></div>
+    </div>`:'<div style="height:6px;background:rgba(255,255,255,0.1);"></div>'}
   </div>
 
 
