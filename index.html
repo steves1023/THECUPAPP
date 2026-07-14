@@ -1648,7 +1648,7 @@ function renderMatchCard(m,i){
             return`<div class="match-player-row" style="border-bottom:1px solid rgba(0,39,76,0.06);">
               <div class="player-color-dot" style="background:${tc};"></div>
               <div class="player-name-label" style="color:var(--blue);">${p.name}</div>
-              <div class="player-hdcp-tag">HCP ${p.handicap}</div>
+              <div class="player-hdcp-tag">HCP ${p.handicap<0?"+"+Math.abs(p.handicap):p.handicap}</div>
               ${showTotal?`<div class="player-score-num" style="color:var(--blue);font-size:16px;">${sideNet}</div>`:''}
             </div>`;
           }).join('');
@@ -1656,13 +1656,13 @@ function renderMatchCard(m,i){
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team1.color};"></div>
           <div class="player-name-label" style="color:var(--blue);font-weight:${res.winner==='team1'?'bold':'normal'};">${t1l}</div>
-          <div class="player-hdcp-tag">HCP ${avgHT(m.team1Players)}</div>
+          <div class="player-hdcp-tag">HCP ${(h=>h<0?"+"+Math.abs(h):h)(avgHT(m.team1Players))}</div>
           <div class="player-score-num" style="color:var(--blue);">${t1any?t1t:'\u2014'}</div>
         </div>
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team2.color};"></div>
           <div class="player-name-label" style="color:var(--blue);font-weight:${res.winner==='team2'?'bold':'normal'};">${t2l}</div>
-          <div class="player-hdcp-tag">HCP ${avgHT(m.team2Players)}</div>
+          <div class="player-hdcp-tag">HCP ${(h=>h<0?"+"+Math.abs(h):h)(avgHT(m.team2Players))}</div>
           <div class="player-score-num" style="color:var(--blue);">${t2any?t2t:'\u2014'}</div>
         </div>`}
       </div>
@@ -1898,13 +1898,13 @@ function renderGroupCard(parent,pi,children){
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team1.color};"></div>
           <div class="player-name-label" style="color:var(--blue);">${mLabel(parent,1)}</div>
-          <div class="player-hdcp-tag">HCP ${avgHT(parent.team1Players)}</div>
+          <div class="player-hdcp-tag">HCP ${(h=>h<0?"+"+Math.abs(h):h)(avgHT(parent.team1Players))}</div>
           <div class="player-score-num" style="color:var(--blue);">${pPlayed>0?pt1t:'—'}</div>
         </div>
         <div class="match-player-row">
           <div class="player-color-dot" style="background:${state.team2.color};"></div>
           <div class="player-name-label" style="color:var(--blue);">${mLabel(parent,2)}</div>
-          <div class="player-hdcp-tag">HCP ${avgHT(parent.team2Players)}</div>
+          <div class="player-hdcp-tag">HCP ${(h=>h<0?"+"+Math.abs(h):h)(avgHT(parent.team2Players))}</div>
           <div class="player-score-num" style="color:var(--blue);">${pPlayed>0?pt2t:'—'}</div>
         </div>
       </div>
@@ -3573,7 +3573,7 @@ function addMatchBet(mi, label, type){
 function openAddBet(){
   const allPlayers=state.players;
   const allOptions=[
-    ...allPlayers.map(p=>({id:p.id,label:p.name+' (HCP '+p.handicap+')'})),
+    ...allPlayers.map(p=>({id:p.id,label:p.name+' (HCP '+(p.handicap<0?'+'+Math.abs(p.handicap):p.handicap)+')'})),
     {id:'t1',label:state.team1.name+' (Team)'},{id:'t2',label:state.team2.name+' (Team)'}
   ];
   modal=`<div class="modal" onclick="event.stopPropagation()">
