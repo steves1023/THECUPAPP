@@ -65,6 +65,7 @@ body{color:var(--blue);}
 /* ── FORMS ── */
 .form-group{margin-bottom:14px;}
 .form-label{font-size:11px;color:var(--blue);margin-bottom:6px;display:block;font-family:Arial,sans-serif;letter-spacing:0.5px;font-weight:bold;text-transform:uppercase;}
+.join-screen .form-label{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5);}
 input,select,textarea{width:100%;padding:12px 14px;background:#fff;border:1.5px solid rgba(0,39,76,0.2);border-radius:var(--radius);color:var(--blue);font-size:16px;font-family:Arial,sans-serif;-webkit-appearance:none;appearance:none;outline:none;}
 input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,39,76,0.1);}
 input::placeholder,textarea::placeholder{color:rgba(0,39,76,0.3);}
@@ -877,7 +878,7 @@ function renderJoinScreen(){
   document.getElementById('app').innerHTML=`
     <div class="join-screen">
       <img src="${LOGO_B64}" alt="The Cup" style="width:180px;height:180px;object-fit:contain;margin-bottom:8px;filter:drop-shadow(0 4px 20px rgba(0,0,0,0.4));">
-      <div style="font-size:11px;color:rgba(255,255,255,0.75);font-family:Arial;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;">Ryder Cup Style · Scores · Gambling</div>
+      <div style="font-size:11px;color:#fff;font-family:Arial;letter-spacing:2px;text-transform:uppercase;margin-bottom:20px;text-shadow:0 1px 4px rgba(0,0,0,0.5);">Ryder Cup Style · Scores · Gambling</div>
       <div style="width:100%;max-width:340px;">
         <div class="form-group"><label class="form-label">Event Name</label>
           <input type="text" id="j-event" placeholder="The Cup 2025" style="font-size:15px;text-align:center;"></div>
@@ -893,22 +894,22 @@ function renderJoinScreen(){
               style="padding:10px 6px;border-radius:var(--radius);border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);cursor:pointer;text-align:center;transition:all 0.15s;">
               <div style="font-size:20px;margin-bottom:4px;">🏌️</div>
               <div style="font-size:11px;font-weight:bold;color:#fff;">Scramble</div>
-              <div style="font-size:9px;color:rgba(255,255,255,0.6);">Live Leaderboard</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.85);">Live Leaderboard</div>
             </div>
             <div onclick="selectEtype('singlematch')" id="etype-singlematch"
               style="padding:10px 6px;border-radius:var(--radius);border:2px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);cursor:pointer;text-align:center;transition:all 0.15s;">
               <div style="font-size:20px;margin-bottom:4px;">⚔️</div>
               <div style="font-size:11px;font-weight:bold;color:#fff;">Single Match</div>
-              <div style="font-size:9px;color:rgba(255,255,255,0.6);">1v1 or 2v2</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.85);">1v1 or 2v2</div>
             </div>
           </div>
           <input type="hidden" id="j-etype" value="rydercup">
         </div>
-        <div class="form-group"><label class="form-label">Room Code <span style="font-size:10px;font-weight:normal;text-transform:none;opacity:0.7;">(unique code for your group)</span></label>
+        <div class="form-group"><label class="form-label">Room Code <span style="font-size:10px;font-weight:normal;text-transform:none;color:rgba(255,255,255,0.75);">(unique code for your group)</span></label>
           <input type="text" id="j-newcode" class="code-input" placeholder="e.g. EAGLES" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-gold btn-lg w-full" onclick="createRoom()" style="margin-bottom:12px;">Create New Event</button>
-        <div style="text-align:center;font-size:12px;color:var(--text-dim);font-family:Arial;margin:8px 0;">\u2014 or join an existing event \u2014</div>
-        <div class="form-group"><label class="form-label" style="color:rgba(255,255,255,0.7);">Event Name</label>
+        <div style="text-align:center;font-size:12px;color:#fff;font-family:Arial;margin:8px 0;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,0.6);">\u2014 or join an existing event \u2014</div>
+        <div class="form-group"><label class="form-label" style="color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.4);">Event Name</label>
           <input type="text" id="j-join-event" placeholder="Event name" style="font-size:15px;text-align:center;"></div>
         <div class="form-group"><input type="text" id="j-code" class="code-input" placeholder="ROOM CODE" maxlength="8" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"></div>
         <button class="btn btn-ghost btn-lg w-full" onclick="joinRoom()">Join Event</button>
