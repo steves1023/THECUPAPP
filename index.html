@@ -295,9 +295,10 @@ async function pullFromCloud(code){
   }catch(e){console.error('pullFromCloud error:',e.message||e);return false;}
 }
 
+let _presenceState={};
 function subscribeToRoom(code){
   if(realtimeSub){realtimeSub.unsubscribe();}
-  realtimeSub=sb.channel('room:'+code)
+  realtimeSub=sb.channel('room:'+code,{config:{presence:{key:state.myName||('Guest-'+Math.random().toString(36).slice(2,6))}}})
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'events',filter:'code=eq.'+code},payload=>{
       if(!payload.new?.data)return;
       try{
@@ -314,12 +315,40 @@ function subscribeToRoom(code){
         save();syncStatus='live';render();
       }catch(e){console.error('realtime parse error:',e);}
     })
-    .subscribe(s=>{
+    .on('presence',{event:'sync'},()=>{
+      _presenceState=realtimeSub.presenceState();
+      if(tab==='stats') renderTabInPlace();
+    })
+    .on('presence',{event:'join'},()=>{
+      _presenceState=realtimeSub.presenceState();
+      if(tab==='stats') renderTabInPlace();
+    })
+    .on('presence',{event:'leave'},()=>{
+      _presenceState=realtimeSub.presenceState();
+      if(tab==='stats') renderTabInPlace();
+    })
+    .subscribe(async s=>{
       syncStatus=s==='SUBSCRIBED'?'live':'connecting';
       renderSyncBar();
-      // On reconnect, pull fresh state
-      if(s==='SUBSCRIBED') pullFromCloud(code).then(ok=>{if(ok){save();render();}});
+      if(s==='SUBSCRIBED'){
+        pullFromCloud(code).then(ok=>{if(ok){save();render();}});
+        // Track own presence
+        const teamName=state.eventType==='scramble'&&state.myTeamIdx!=null
+          ?(allTeams().find(t=>t.idx===state.myTeamIdx)||{}).name||'Unknown'
+          :null;
+        await realtimeSub.track({
+          name:state.myName||'Guest',
+          team:teamName,
+          joinedAt:Date.now(),
+          isHost:state.isHost||false
+        });
+      }
     });
+}
+
+function renderTabInPlace(){
+  const el=document.getElementById('tc');
+  if(el) el.innerHTML=renderTab();
 }
 
 function renderSyncBar(){
@@ -1068,6 +1097,11 @@ function promptRenameTeam(tIdx){
 function selectMyTeam(tIdx){
   state.myTeamIdx=tIdx;
   save();
+  // Update presence with team info
+  if(realtimeSub&&tIdx!=null){
+    const t=getTeamByIdx(tIdx);
+    realtimeSub.track({name:state.myName||'Guest',team:t?t.name:null,joinedAt:Date.now(),isHost:state.isHost||false}).catch(()=>{});
+  }
   // Now ask for starting hole
   if(tIdx!=null){
     renderStartingHolePicker(tIdx);
@@ -3712,7 +3746,44 @@ function confirmSettle(i,winner){
 }
 
 /* \u2550\u2550\u2550 STATS \u2550\u2550\u2550 */
-function renderStats(){const sb=subTab.stats;return`<div class="section-header"><span class="section-title">Statistics</span></div><div class="pill-tabs"><div class="pill-tab ${sb==='players'?'active':''}" onclick="setSub('stats','players')">Players</div><div class="pill-tab ${sb==='teams'?'active':''}" onclick="setSub('stats','teams')">Teams</div></div>${sb==='players'?renderPlayerStats():renderTeamStats()}`;}
+function renderOnlinePlayers(){
+  if(state.eventType!=='scramble') return '';
+  const keys=Object.keys(_presenceState||{});
+  const users=[];
+  keys.forEach(k=>{
+    (_presenceState[k]||[]).forEach(u=>users.push(u));
+  });
+  if(!users.length) return '<div style="padding:12px 16px;font-size:13px;color:var(--text-muted);text-align:center;">No players currently online</div>';
+  const rows=users.map(u=>{
+    const t=u.team?allTeams().find(t=>t.name===u.team):null;
+    const dot=t?`<div style="width:8px;height:8px;border-radius:50%;background:${t.color};flex-shrink:0;"></div>`:'<div style="width:8px;height:8px;border-radius:50%;background:#ccc;flex-shrink:0;"></div>';
+    const teamLabel=u.team?`<span style="font-size:10px;color:var(--text-muted);">${u.team}</span>`:'<span style="font-size:10px;color:var(--text-muted);">No team</span>';
+    const hostBadge=u.isHost?'<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:rgba(255,203,5,0.2);color:var(--blue);margin-left:4px;">HOST</span>':'';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid rgba(0,39,76,0.06);">
+      <div style="position:relative;">
+        ${dot}
+        <div style="position:absolute;bottom:-1px;right:-1px;width:5px;height:5px;border-radius:50%;background:#2ECC40;border:1px solid #fff;"></div>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;color:var(--blue);">${u.name||'Guest'}${hostBadge}</div>
+        ${teamLabel}
+      </div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-bottom:16px;">
+    <div style="background:var(--blue);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-size:12px;font-weight:bold;color:var(--maize);text-transform:uppercase;letter-spacing:1px;display:flex;align-items:center;gap:8px;">
+        <span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:7px;height:7px;border-radius:50%;background:#2ECC40;display:inline-block;"></span>Players Online</span>
+      </div>
+      <div style="font-size:12px;font-weight:bold;color:#fff;">${users.length} connected</div>
+    </div>
+    <div style="background:#fff;border-radius:0 0 var(--radius-lg) var(--radius-lg);border:1px solid var(--border);border-top:none;overflow:hidden;">
+      ${rows}
+    </div>
+  </div>`;
+}
+
+function renderStats(){const sb=subTab.stats;const online=renderOnlinePlayers();return`<div style="padding:12px;">${online}</div><div class="section-header"><span class="section-title">Statistics</span></div><div class="pill-tabs"><div class="pill-tab ${sb==='players'?'active':''}" onclick="setSub('stats','players')">Players</div><div class="pill-tab ${sb==='teams'?'active':''}" onclick="setSub('stats','teams')">Teams</div></div>${sb==='players'?renderPlayerStats():renderTeamStats()}`;}
 function renderPlayerStats(){if(!state.players.length)return`<div class="empty-state">Add players to see stats.</div>`;const rows=[...state.players].map(p=>{const r=pRecord(p.id),pl=r.w+r.l+r.h,pct=pl>0?((r.w+r.h*0.5)/pl*100).toFixed(0):0;return{...p,...r,played:pl,pct};}).sort((a,b)=>b.pct-a.pct);return`<div style="padding:0 16px;">${rows.map((p,rank)=>{const ac=AVC[state.players.findIndex(pl=>pl.id===p.id)%AVC.length],init=p.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);return`<div class="card" style="margin-bottom:8px;"><div style="display:flex;align-items:center;gap:10px;"><div style="font-size:18px;font-weight:bold;color:var(--text-dim);min-width:20px;">${rank+1}</div><div class="player-avatar" style="background:${ac}22;color:${ac};">${init}</div><div style="flex:1;"><div style="font-size:13px;font-weight:bold;">${p.name}</div><div style="font-size:11px;color:var(--text-muted);font-family:Arial;">${p.w}W \u00b7 ${p.l}L \u00b7 ${p.h}H</div><div class="stat-bar" style="margin-top:6px;"><div class="stat-fill" style="width:${p.pct}%;"></div></div></div><div style="text-align:right;"><div style="font-size:20px;font-weight:bold;color:var(--maize-dark);">${p.pct}%</div></div></div></div>`;}).join('')}</div>`;}
 function renderTeamStats(){const t1=teamPts(1),t2=teamPts(2),tot=t1+t2||1;return`<div style="padding:0 16px;"><div class="card"><div style="height:16px;border-radius:8px;overflow:hidden;background:rgba(0,39,76,0.06);display:flex;margin-bottom:10px;"><div style="width:${t1/tot*100}%;background:${state.team1.color};"></div><div style="flex:1;background:${state.team2.color};"></div></div><div style="display:flex;justify-content:space-between;"><div><div style="font-size:12px;color:${state.team1.color};font-family:Arial;">${state.team1.name}</div><div style="font-size:22px;font-weight:bold;">${t1}</div></div><div style="text-align:right;"><div style="font-size:12px;color:#4fc3f7;font-family:Arial;">${state.team2.name}</div><div style="font-size:22px;font-weight:bold;">${t2}</div></div></div></div></div>`;}
 
