@@ -4246,6 +4246,28 @@ const _courseCache={};
 let _courseCacheIdx=0;
 function _cacheCourse(c){const k='cc'+(++_courseCacheIdx);_courseCache[k]=c;return k;}
 
+function _safeTees(teesRaw){
+  if(!teesRaw) return [];
+  if(Array.isArray(teesRaw)) return teesRaw;
+  // {male:[...], female:[...]}
+  if(Array.isArray(teesRaw.male)) return [...(teesRaw.male||[]),...(teesRaw.female||[])];
+  // {tees:[...]}
+  if(Array.isArray(teesRaw.tees)) return teesRaw.tees;
+  // object with numeric keys (like {0:{...},1:{...}})
+  const vals=Object.values(teesRaw);
+  if(vals.length&&typeof vals[0]==='object'&&!Array.isArray(vals[0])) return vals;
+  return [];
+}
+function _maleTees(teesRaw){
+  if(!teesRaw) return [];
+  if(Array.isArray(teesRaw)) return teesRaw;
+  if(Array.isArray(teesRaw.male)) return teesRaw.male;
+  if(Array.isArray(teesRaw.tees)) return teesRaw.tees;
+  const vals=Object.values(teesRaw);
+  if(vals.length&&typeof vals[0]==='object'&&!Array.isArray(vals[0])) return vals;
+  return [];
+}
+
 async function doCSrch(fs){
   const q=(document.getElementById('cq')||{}).value||'';
   const el=document.getElementById('cresults');
@@ -4285,9 +4307,9 @@ async function doCSrch(fs){
         }
         const loc=[_city,_state,_country].filter(Boolean).join(', ');
         // tees can be {male:[...], female:[...]} or a flat array
-        const maleTees=c.tees?(Array.isArray(c.tees)?c.tees:(c.tees.male||[])):[];
-        const par=maleTees.length&&maleTees[0].par_total?maleTees[0].par_total:'';
-        const teeNames=maleTees.slice(0,5).map(t=>t.tee_name||'').filter(Boolean).join(' · ');
+        const maleTees=_maleTees(c.tees);
+        const par=maleTees.length&&maleTees[0]&&maleTees[0].par_total?maleTees[0].par_total:'';
+        const teeNames=maleTees.slice(0,5).map(t=>t&&(t.tee_name||t.name)||'').filter(Boolean).join(' · ');
         const key=_cacheCourse(c);
         return '<div class="course-result-item" data-ckey="'+key+'" data-fs="'+(fs?1:0)+'" onclick="_clickApiCourse(this)" style="cursor:pointer;padding:12px 14px;border-bottom:1px solid rgba(0,39,76,0.06);">'
           +'<div style="font-weight:bold;font-size:14px;color:var(--blue);margin-bottom:2px;">'+c.club_name+'</div>'
@@ -4348,11 +4370,11 @@ async function applyApiCourse(keyOrJson,fs){
     // GolfCourseAPI returns tees as {male:[...], female:[...]}
     // Flatten all tees into a single array, prefer male tees first
     const rawTees=c.tees||{};
-    const maleTees=Array.isArray(rawTees)?rawTees:(rawTees.male||[]);
+    const maleTees=_maleTees(rawTees);
     const femaleTees=Array.isArray(rawTees)?[]:(rawTees.female||[]);
     // Deduplicate: prefer male tees, add female only if name not already present
     const seenNames=new Set();
-    const allTees=[...maleTees,...femaleTees].filter(t=>{
+    const allTees=_safeTees(rawTees).filter(t=>{
       const name=(t.tee_name||t.name||'').trim();
       if(!name||seenNames.has(name.toLowerCase())) return false;
       seenNames.add(name.toLowerCase());
@@ -4415,7 +4437,7 @@ async function applyApiCourse(keyOrJson,fs){
     const fallback={
       name:raw.club_name,
       location:[raw.city,raw.state_name||raw.country].filter(Boolean).join(', '),
-      total_par:raw.tees&&(raw.tees.male||raw.tees)[0]?(raw.tees.male||raw.tees)[0].par_total:72,
+      total_par:(_maleTees(raw.tees||{})[0]||{}).par_total||72,
       holes:[],tees:[]
     };
     applyCourse(JSON.stringify(fallback),fs);
