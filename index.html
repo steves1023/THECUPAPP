@@ -2468,7 +2468,7 @@ function updHole(mi,h,t,v,par){
 /* \u2550\u2550\u2550 MATCH MODAL \u2550\u2550\u2550 */
 function openMatchModal(idx){
   if(idx!=null){const m=state.matches[idx];matchDraft={editIdx:idx,format:m.format,totalHoles:m.totalHoles,hdcpPercent:m.hdcpPercent!=null?m.hdcpPercent:100,matchType:m.matchType||'teams',useNet:m.useNet,indPlayers:[...(m.indPlayers||[])],indPlayerSides:{...(m.indPlayerSides||{})},linkedTeamMatch:false,createIndividuals:false,pairings:[],team1Players:[...(m.team1Players||[])],team2Players:[...(m.team2Players||[])],notes:m.notes||'',courseData:m.courseData||null,selectedTee:m.selectedTee||0,playerTees:{...(m.playerTees||{})}};}
-  else matchDraft={editIdx:null,format:'fourball',totalHoles:state.settings.holes||18,hdcpPercent:100,matchType:'teams',indPlayers:[],indPlayerSides:{},linkedTeamMatch:false,team1Players:[],team2Players:[],notes:'',courseData:state.settings.courseData||null,selectedTee:0,playerTees:{}};
+  else matchDraft={editIdx:null,format:'fourball',totalHoles:state.settings.holes||18,hdcpPercent:100,matchType:'teams',useNet:true,indPlayers:[],indPlayerSides:{},linkedTeamMatch:false,createIndividuals:false,pairings:[],team1Players:[],team2Players:[],notes:'',courseData:state.settings.courseData||null,selectedTee:0,playerTees:{}};
   renderMatchModal();
 }
 function renderMatchModal(){
