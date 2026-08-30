@@ -2189,6 +2189,25 @@ function mapboxSatelliteUrl(lng,lat,zoom,w,h,token){
   return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},0/${w}x${h}@2x?access_token=${token}&logo=false&attribution=false`;
 }
 
+function closeSatFullscreen(){const el=document.getElementById('sat-fullscreen');if(el)el.remove();}
+
+function openSatelliteFullscreen(url, hole){
+  const overlay=document.createElement('div');
+  overlay.id='sat-fullscreen';
+  overlay.style.cssText='position:fixed;inset:0;background:#000;z-index:9999;display:flex;flex-direction:column;';
+  overlay.innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#000;flex-shrink:0;">'+
+      '<div style="font-size:13px;font-weight:700;color:#fff;">Hole '+hole+' · Satellite</div>'+
+      '<button onclick="closeSatFullscreen()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:20px;width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">✕</button>'+
+    '</div>'+
+    '<div style="flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:0;">'+
+      '<img src="'+url+'" style="width:100%;height:100%;object-fit:contain;display:block;">'+
+    '</div>'+
+    '<div style="padding:8px;text-align:center;font-size:10px;color:rgba(255,255,255,0.4);flex-shrink:0;">© Mapbox · © OpenStreetMap</div>';
+  document.body.appendChild(overlay);
+}
+
+
 async function injectHoleMap(mi, hole){
   const m=state.matches[mi];
   const el=document.getElementById('hole-map-'+mi+'-'+hole);
@@ -2210,11 +2229,13 @@ async function injectHoleMap(mi, hole){
     lng=coords.lng; lat=coords.lat;
   }
   const zoom=holeData&&holeData.longitude?16:15;
-  const url=mapboxSatelliteUrl(lng,lat,zoom,480,160,token);
-  el.innerHTML=`<div style="position:relative;border-radius:8px;overflow:hidden;margin-bottom:8px;">
-    <img src="${url}" style="width:100%;height:110px;object-fit:cover;display:block;" 
+  const thumbUrl=mapboxSatelliteUrl(lng,lat,zoom,480,160,token);
+  const fullUrl=mapboxSatelliteUrl(lng,lat,zoom,1280,900,token);
+  el.innerHTML=`<div style="position:relative;border-radius:8px;overflow:hidden;margin-bottom:8px;cursor:pointer;" onclick="openSatelliteFullscreen('${fullUrl}',${hole})">
+    <img src="${thumbUrl}" style="width:100%;height:110px;object-fit:cover;display:block;"
          onerror="this.parentElement.parentElement.style.display='none'">
     <div style="position:absolute;bottom:6px;left:8px;background:rgba(0,0,0,0.55);border-radius:4px;padding:2px 7px;font-size:9px;font-weight:700;color:#fff;letter-spacing:0.5px;">Hole ${hole} · Satellite</div>
+    <div style="position:absolute;top:6px;right:8px;background:rgba(0,0,0,0.55);border-radius:4px;padding:3px 7px;font-size:11px;color:#fff;">⛶</div>
   </div>`;
 }
 
