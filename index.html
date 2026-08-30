@@ -1978,7 +1978,7 @@ function renderGroupCard(parent,pi,children){
       <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 10px 3px;">
         <span style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);font-family:Arial;">Individual Scores</span>
         <div style="display:flex;gap:4px;">
-          ${canScoreChild?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${ci})" style="font-size:10px;padding:2px 8px;">✏️ Scores</button>`:''}
+          ${canScoreChild&&!cm.is1v1?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${ci})" style="font-size:10px;padding:2px 8px;">✏️ Scores</button>`:''}
           ${state.isHost?`<button class="btn btn-sm btn-ghost" onclick="delMatch(${ci})" style="font-size:10px;color:#ff9aa2;border-color:rgba(255,150,150,0.3);padding:2px 6px;">✕</button>`:''}
         </div>
       </div>
@@ -1995,7 +1995,7 @@ function renderGroupCard(parent,pi,children){
         ${cn?`<span style="font-size:10px;color:#52c97a;font-family:Arial;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⛳ ${cn}</span>`:''}
       </div>
       <div style="display:flex;gap:4px;">
-        ${canScoreParent&&children.length===0?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${pi})" style="padding:4px 10px;">✏️</button>`:''}
+        ${canScoreParent?`<button class="btn btn-sm btn-gold" onclick="openScorecard(${pi})" style="padding:4px 10px;">✏️</button>`:''}
         <button class="btn btn-sm btn-ghost" onclick="openMatchBetModal(${pi})" style="color:var(--maize);border-color:rgba(255,203,5,0.4);padding:4px 8px;">💰</button>
         <button class="btn btn-sm btn-ghost" onclick="toggleCountsForTeam(${pi})" style="color:${parent.countsForTeam===false?'rgba(255,255,255,0.25)':'var(--maize)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;">🏆</button>
         <button class="btn btn-sm btn-ghost" onclick="toggleComplete(${pi})" style="color:${parent.completedAt?'#2ECC40':'rgba(255,255,255,0.4)'};border-color:rgba(255,255,255,0.15);padding:4px 8px;">✓</button>
@@ -2165,6 +2165,15 @@ function setScrambleScore(mi,h,key,score,par){
 
 function openScorecard(mi,startHole){
   const m=state.matches[mi];
+  // If this is a parent team match with a linked individual match, open the individual scorecard
+  // so all players can enter scores in one place
+  if(m&&m.matchType!=='individual'){
+    const linkedInd=state.matches.findIndex(lm=>lm.linkedFrom===m.id&&lm.matchType==='individual'&&!lm.is1v1);
+    if(linkedInd>=0){
+      openScorecard(linkedInd,startHole);
+      return;
+    }
+  }
   // Auto reroll all holes to team match when opening individual scorecard
   if(m&&m.linkedFrom){
     const holes=matchHoles(m);
@@ -2655,11 +2664,23 @@ function renderMatchModal(){
         </div>
       </div>
     </div>`:''}
-    ${!isInd&&!isEdit?`<div class="form-group">
+    ${!isInd?`<div class="form-group">
       <label class="form-label">1v1 Side Matches <span style="font-size:10px;font-weight:normal;color:var(--text-muted);">optional — scores roll up from individual match</span></label>
       <div style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;">
-        ${(d.pairings||[]).length===0?'<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);">None yet</div>':''}
-        ${(d.pairings||[]).map((pair,pi)=>{const p1=state.players.find(p=>p.id===pair[0]);const p2=state.players.find(p=>p.id===pair[1]);return`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(0,39,76,0.06);"><span style="font-size:13px;font-weight:bold;color:var(--blue);">${p1?p1.name:'?'}<span style="color:var(--text-muted);font-weight:normal;"> vs </span>${p2?p2.name:'?'}</span><button onclick="removePairing(${pi})" style="margin-left:auto;background:none;border:none;color:#C0392B;cursor:pointer;font-size:16px;">✕</button></div>`;}).join('')}
+        ${(()=>{
+          // Show existing saved 1v1 matches (when editing)
+          const existingM=isEdit?state.matches[d.editIdx]:null;
+          const saved1v1=isEdit?state.matches.filter((lm,li)=>lm.is1v1&&(lm.linkedFrom===(existingM&&existingM.id)||lm.parentIndMatch===(existingM&&existingM.id))):[];
+          const savedRows=saved1v1.map((lm,li)=>{
+            const lp1=state.players.find(p=>p.id===(lm.indPlayers||[])[0]);
+            const lp2=state.players.find(p=>p.id===(lm.indPlayers||[])[1]);
+            const lmi=state.matches.indexOf(lm);
+            return`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(0,39,76,0.06);background:rgba(0,39,76,0.02);"><span style="font-size:11px;padding:2px 6px;border-radius:8px;background:rgba(0,39,76,0.08);color:var(--text-muted);margin-right:2px;">Saved</span><span style="font-size:13px;font-weight:bold;color:var(--blue);">${lp1?lp1.name:'?'}<span style="color:var(--text-muted);font-weight:normal;"> vs </span>${lp2?lp2.name:'?'}</span><button onclick="delMatch(${lmi});renderMatchModal();" style="margin-left:auto;background:none;border:none;color:#C0392B;cursor:pointer;font-size:16px;">✕</button></div>`;
+          }).join('');
+          const draftRows=(d.pairings||[]).map((pair,pi)=>{const p1=state.players.find(p=>p.id===pair[0]);const p2=state.players.find(p=>p.id===pair[1]);return`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(0,39,76,0.06);"><span style="font-size:11px;padding:2px 6px;border-radius:8px;background:rgba(255,203,5,0.2);color:var(--blue);margin-right:2px;">New</span><span style="font-size:13px;font-weight:bold;color:var(--blue);">${p1?p1.name:'?'}<span style="color:var(--text-muted);font-weight:normal;"> vs </span>${p2?p2.name:'?'}</span><button onclick="removePairing(${pi})" style="margin-left:auto;background:none;border:none;color:#C0392B;cursor:pointer;font-size:16px;">✕</button></div>`;}).join('');
+          const empty=!savedRows&&!draftRows?'<div style="padding:10px 12px;font-size:12px;color:var(--text-muted);">None yet</div>':'';
+          return empty+savedRows+draftRows;
+        })()}
       </div>
       ${(d.team1Players||[]).concat(d.team2Players||[]).length>=2?`<div style="display:flex;gap:6px;align-items:center;">
         <select id="pair-p1" style="flex:1;font-size:13px;padding:8px;border:1.5px solid rgba(0,39,76,0.2);border-radius:var(--radius);"><option value="">Player 1</option>${(d.team1Players||[]).concat(d.team2Players||[]).map(id=>{const p=state.players.find(pl=>pl.id===id);return p?`<option value="${id}">${p.name}</option>`:'';}).join('')}</select>
@@ -2757,6 +2778,7 @@ function saveMatch(){
       }
       existing.matchBets=existing.matchBets||[];
       // If there's a linked individual match, update its format/handicap too
+      let existingIndId=null;
       state.matches.forEach(lm=>{
         if(lm.linkedFrom===existing.id){
           lm.format=existing.format;
@@ -2765,7 +2787,35 @@ function saveMatch(){
           lm.courseData=existing.courseData;
           lm.selectedTee=existing.selectedTee;
           lm.playerTees=existing.playerTees;
+          if(lm.matchType==='individual'&&!lm.is1v1) existingIndId=lm.id;
         }
+      });
+      // Create any new 1v1 pairings added during edit
+      (d.pairings||[]).forEach((pair,pi)=>{
+        const [pid1,pid2]=pair;
+        const p1=state.players.find(p=>p.id===pid1);
+        const p2=state.players.find(p=>p.id===pid2);
+        if(!p1||!p2) return;
+        // Skip if this pairing already exists
+        const alreadyExists=state.matches.some(lm=>lm.is1v1&&
+          ((lm.indPlayers||[]).includes(pid1)&&(lm.indPlayers||[]).includes(pid2)));
+        if(alreadyExists) return;
+        const sides={[pid1]:'1',[pid2]:'2'};
+        const parentId=existingIndId||existing.id;
+        state.matches.push({
+          id:'m'+(Date.now()+10+pi),...base,
+          format:existing.format,
+          matchType:'individual',
+          is1v1:true,
+          indPlayers:[pid1,pid2],
+          indPlayerSides:sides,
+          team1Players:[pid1],
+          team2Players:[pid2],
+          notes:p1.name.split(' ')[0]+' vs '+p2.name.split(' ')[0],
+          linkedFrom:parentId,
+          parentIndMatch:existingIndId||null,
+          holes:{}
+        });
       });
     } else {
       // New match
